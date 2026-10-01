@@ -274,7 +274,7 @@ const ROLES = {
   fool:     { name:'Town Fool', text:'You win if the village votes you out. Get yourself hanged.' },
 };
 const DEFAULTS = {
-  wolves:'auto', doctor:false, fool:false, witchBoth:true,
+  wolves:'auto', witch:true, doctor:false, fool:false, witchBoth:true,
   dayMode:'structured', rounds:2, speak:20, discussion:180, night:60, voteTime:45,
   votes:'public', reveal:true, parity:'smart', parityTimer:'short', foolWin:'continue',
   test:{ on:false, fast:false, allSeeing:false, forceRole:'' },
@@ -293,7 +293,7 @@ function dur(s){
 const autoWolves = n => n <= 6 ? 1 : n <= 10 ? 2 : n <= 14 ? 3 : 4;
 function roleList(n, s){
   const w = s.wolves === 'auto' ? autoWolves(n) : Math.max(1, Math.min(+s.wolves, n - 2));
-  const specials = ['seer','witch']; if(s.doctor) specials.push('doctor'); if(s.fool) specials.push('fool');
+  const specials = ['seer']; if(s.witch) specials.push('witch'); if(s.doctor) specials.push('doctor'); if(s.fool) specials.push('fool');
   const roles = Array(w).fill('werewolf');
   for(const r of specials) if(roles.length < n) roles.push(r);
   while(roles.length < n) roles.push('villager');
@@ -313,11 +313,11 @@ function lobbyWarnings(n, s){
   const w = [];
   if(n < MIN_PLAYERS) w.push(`At least ${MIN_PLAYERS} players needed (add bots in Test mode to try it alone).`);
   const roles = roleList(Math.max(n, MIN_PLAYERS), s);
-  const specials = 2 + (s.doctor ? 1 : 0) + (s.fool ? 1 : 0);
+  const specials = 1 + (s.witch ? 1 : 0) + (s.doctor ? 1 : 0) + (s.fool ? 1 : 0);
   const wolves = roles.filter(r => r === 'werewolf').length;
   if(n >= MIN_PLAYERS && wolves + specials > n) w.push('Not enough players for every role you switched on; some will be left out.');
   if(n >= MIN_PLAYERS && wolves * 2 >= n - 1) w.push('That many wolves for this group means a very quick wolf win.');
-  if(s.doctor) w.push('Doctor and Witch together give the village a lot of protection; games may run long.');
+  if(s.doctor && s.witch) w.push('Doctor and Witch together give the village a lot of protection; games may run long.');
   if(s.fool && n < 8) w.push('In a small group, voting out the Town Fool costs the village a whole day.');
   return w;
 }
@@ -494,8 +494,11 @@ async function resolveNight(ph){
     const p = { ...secrets[witch].potions };
     if(wa.save && victim) p.save = false;
     if(wa.kill) p.kill = false;
-    secrets[witch].potions = p; await DB.update(sp(witch), { potions: p });
+    const used = {}; if(wa.save && victim) used['used.save'] = victim; if(wa.kill) used['used.kill'] = wa.kill;
+    secrets[witch].potions = p; await DB.update(sp(witch), { potions: p, ...used });
   }
+  // The doctor's role card lists everyone they have guarded, in order.
+  if(doc && act(doc)?.target) await DB.update(sp(doc), { [`guarded.${n}`]: act(doc).target });
   const wolfPicks = {}; for(const u of al) if(secrets[u]?.role === 'werewolf') wolfPicks[u] = act(u)?.target || null;
   const seerU = al.find(u => secrets[u]?.role === 'seer'), sa = seerU ? act(seerU) : null;
   await logHistory(`n${String(n).padStart(2,'0')}a`, { type:'night', n, wolfPicks, wolfTarget: nt.wolfTarget || null, wolfFailed: !!nt.wolfFailed,
@@ -789,9 +792,10 @@ function renderLobby(){
     ${host ? '' : '<p class="note" style="margin-top:14px">The host is choosing the rules. Settings appear here as they change.</p>'}
     <fieldset><legend>Roles</legend>
       ${sel('wolves', [['auto','Auto by group size'],['1','1'],['2','2'],['3','3'],['4','4']], 'Werewolves')}
+      ${sel('witch', onoff, 'Witch')}
+      ${s.witch ? sel('witchBoth', [['true','Allowed'],['false','One per night']], 'Witch: both potions in one night') : ''}
       ${sel('doctor', onoff, 'Doctor')}
       ${sel('fool', onoff, 'Town Fool')}
-      ${sel('witchBoth', [['true','Allowed'],['false','One per night']], 'Witch: both potions in one night')}
     </fieldset>
     <fieldset><legend>Day</legend>
       ${sel('dayMode', [['structured','Structured'],['open','Open']], 'Discussion')}
@@ -1058,7 +1062,7 @@ function fillerUI(n, note){
         .concat(mine === u ? [{ label:'You', you:true }] : []) }) + noOne(fillerPicked ? '' : 'filler-none', 'No one');
 }
 const noOne = (act, label) => `<div class="list" style="margin-top:7px"><button class="pl" data-act="${act}"><span>${label}</span><span class="marks"></span></button></div>`;
-let witchStep = null, witchNight = 0, witchSave = false, seerNight = 0, seerShow = true;
+let witchStep = null, witchNight = 0, witchSave = false, seerNight = 0, seerTap = null;
 function nightPanel(ph){
   const n = ph.n, r = mySecret?.role, a = myAct(n), al = aliveUids();
   if(r === 'werewolf'){
@@ -1073,12 +1077,12 @@ function nightPanel(ph){
           .concat(a?.target === u ? [{ label:'You', you:true }] : []) });
   }
   if(r === 'seer'){
-    // The list stays up all night. Yes/No sits beside the checked name; tapping any other name hides it, tapping theirs shows it again.
-    if(seerNight !== n){ seerNight = n; seerShow = true; }
-    const res = a ? mySecret.seen?.[n] : null;
+    // The list stays up all night with one answer showing: Yes/No beside the checked name, or n/a beside whoever was tapped last.
+    if(seerNight !== n){ seerNight = n; seerTap = null; }
+    const res = a ? mySecret.seen?.[n] : null, shown = seerTap || res?.target;
     return `<h2>Whose true nature will you see?</h2><p class="hint">Pick anyone. You will learn whether they are a wolf.</p>` +
       playerList(al.filter(u => u !== myUid), { act: a ? 'seer-tap' : 'night-pick',
-        marks: u => res && seerShow && u === res.target ? [{ label: res.wolf ? 'Yes' : 'No' }] : [] });
+        marks: u => !res || u !== shown ? [] : [{ label: u !== res.target ? 'n/a' : res.wolf ? 'Yes' : 'No' }] });
   }
   if(r === 'doctor'){
     if(!a) return `<h2>Whom will you protect tonight?</h2><p class="hint">Pick anyone, yourself included. If the wolves come for them, they live.</p>` + playerList(al, { act:'night-pick' });
@@ -1237,10 +1241,13 @@ function renderRole(){
     $('seal').textContent = roleName(r)[0];
     $('role-name').textContent = roleName(r);
     const pack = r === 'werewolf' ? (mySecret.pack || []).filter(u => u !== myUid) : [];
-    const pot = r === 'witch' && mySecret.potions ? ` Left: ${[mySecret.potions.save ? 'save' : '', mySecret.potions.kill ? 'kill' : ''].filter(Boolean).join(' and ') || 'nothing'}.` : '';
+    const used = mySecret.used || {};
+    const pot = r === 'witch' ? ` Healing draught: ${used.save ? `used on ${nameOf(used.save)}` : 'unused'}. Poison: ${used.kill ? `used on ${nameOf(used.kill)}` : 'unused'}.` : '';
     const seen = r === 'seer' ? Object.entries(mySecret.seen || {}).filter(([, v]) => v?.target).sort((x, y) => x[0] - y[0]) : [];
     const visions = seen.length ? ' Your visions: ' + seen.map(([n, v]) => `Night ${n}, ${nameOf(v.target)}: ${v.wolf ? 'wolf' : 'not a wolf'}.`).join(' ') : '';
-    $('role-text').textContent = ROLES[r].text + (pack.length ? ` Your pack: ${nameList(pack.map(nameOf))}.` : '') + pot + visions;
+    const guarded = r === 'doctor' ? Object.entries(mySecret.guarded || {}).sort((x, y) => x[0] - y[0]).map(([, u]) => nameOf(u)) : [];
+    const guards = guarded.length ? ` You have protected: ${guarded.join(', ')}.` : '';
+    $('role-text').textContent = ROLES[r].text + (pack.length ? ` Your pack: ${nameList(pack.map(nameOf))}.` : '') + pot + visions + guards;
   } else { $('seal').textContent = '?'; $('role-name').textContent = 'Tap to view role'; $('role-text').textContent = ''; }
   const st = $('role-stat'), al = isAlive(myUid);
   st.textContent = al ? '(alive)' : '(dead)'; st.className = 'rstat ' + (al ? 'alive' : 'dead');
@@ -1281,7 +1288,7 @@ document.addEventListener('click', async e => {
       case 'filler': return act('filler', { u });
       case 'filler-none': return act('filler', { u: null });
       case 'night-pick': return act('night-pick', { u });
-      case 'seer-tap': seerShow = u === mySecret?.seen?.[game?.phase?.n]?.target; return render();
+      case 'seer-tap': seerTap = u; return render();
       case 'witch-pick': case 'witch-skip': {
         const sn = mySecret?.night, p = mySecret?.potions || {}, both = settingsOf(game).witchBoth;
         if(witchStep === 'save'){
