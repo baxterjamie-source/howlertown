@@ -730,7 +730,7 @@ function showHome(){
 
 // ---- 12. PLAYER ACTIONS -----------------------------------------------------------
 const myAct = n => actions[myUid]?.n === n ? actions[myUid] : null;
-let fillerIdx = Math.floor(Math.random() * FILLERS.length), fillerPicked = false, witchKillMode = false;
+let fillerIdx = Math.floor(Math.random() * FILLERS.length), fillerPicked = false;
 async function act(kind, data){
   const ph = game?.phase;
   if(kind === 'night-pick'){ const r = mySecret?.role;
@@ -738,7 +738,7 @@ async function act(kind, data){
   if(kind === 'filler'){ if(fillerPicked) return; fillerPicked = true;
     await DB.update(`${gp()}/live/filler`, { [myUid]: { n: ph.n, target: data.u } }).catch(() => {});
     render(); setTimeout(() => { fillerIdx++; fillerPicked = false; render(); }, 7000); }
-  if(kind === 'witch'){ await DB.set(ap(myUid), { n: ph.n, kind:'witch', save: !!data.save, kill: data.kill || null, done:true }); witchKillMode = false; }
+  if(kind === 'witch'){ await DB.set(ap(myUid), { n: ph.n, kind:'witch', save: !!data.save, kill: data.kill || null, done:true }); }
   if(kind === 'accuse') await claimFloor(myUid, data.u);
   if(kind === 'ready') await upd({ [`phase.ready.${myUid}`]: true });
   if(kind === 'vote') await upd({ [`phase.votes.${myUid}`]: data.u });
@@ -1046,61 +1046,61 @@ function renderFinale(){
 const _last = {};
 function setHTML(id, h){ if(_last[id] !== h){ _last[id] = h; $(id).innerHTML = h; } }
 function setText(id, s){ if(_last[id] !== s){ _last[id] = s; $(id).textContent = s; } }
-function fillerUI(n){
+// Every night screen has the same shape: a question, one line of help, a list of names.
+// Power roles' results appear as that one line, so a glance can't tell roles apart.
+function fillerUI(n, note){
   const prompt = FILLERS[fillerIdx % FILLERS.length];
   const mine = filler[myUid]?.n === n && fillerPicked ? filler[myUid].target : null;
   const others = aliveUids().filter(u => u !== myUid);
-  return `<h2>${esc(prompt)}</h2><p class="hint">Pick anyone. The village is choosing too.</p>` +
+  return `<h2>${esc(prompt)}</h2><p class="hint">${note || 'Pick anyone. The village is choosing too.'}</p>` +
     playerList(others, { act: fillerPicked ? '' : 'filler', sel: mine,
       marks: u => Object.entries(filler).filter(([w, f]) => w !== myUid && f && f.n === n && f.target === u).map(([w]) => ({ label: initials(w), title: nameOf(w) }))
-        .concat(mine === u ? [{ label:'You', you:true }] : []) });
+        .concat(mine === u ? [{ label:'You', you:true }] : []) }) + noOne(fillerPicked ? '' : 'filler-none', 'No one');
 }
+const noOne = (act, label) => `<div class="list" style="margin-top:7px"><button class="pl" data-act="${act}"><span>${label}</span><span class="marks"></span></button></div>`;
+let witchStep = null, witchNight = 0, witchSave = false;
 function nightPanel(ph){
   const n = ph.n, r = mySecret?.role, a = myAct(n), al = aliveUids();
   if(r === 'werewolf'){
     const nt = curNight(n);
-    if(nt?.wolfTarget) return `<div class="card serif">The hunt is set. ${esc(nameOf(nt.wolfTarget))} will not see the morning, unless something intervenes.</div>` + fillerUI(n);
-    if(nt?.wolfFailed) return `<div class="card serif">The pack could not agree. No one dies by your claws tonight.</div>` + fillerUI(n);
+    if(nt?.wolfTarget) return fillerUI(n, `The hunt is set: ${esc(nameOf(nt.wolfTarget))}.`);
+    if(nt?.wolfFailed) return fillerUI(n, 'The pack could not agree. No one dies by your claws tonight.');
     const pack = (mySecret.pack || []).filter(u => u !== myUid && isAlive(u));
     const prey = al.filter(u => !(mySecret.pack || []).includes(u));
-    return `<h2>Choose tonight\u2019s victim</h2><p class="hint">${pack.length ? `${esc(nameList(pack.map(nameOf)))} must agree with you, or nobody dies.` : 'You hunt alone tonight.'}${ph.wolfEndsAt ? ' <span class="wolfc">Agree within <span id="wolfclock"></span>.</span>' : ''}</p>` +
+    return `<h2>Choose tonight\u2019s victim</h2><p class="hint">${pack.length ? `${esc(nameList(pack.map(nameOf)))} must agree with you, or nobody dies.` : 'You hunt alone tonight.'}${ph.wolfEndsAt ? ' Agree within <span id="wolfclock"></span>.' : ''}</p>` +
       playerList(prey, { act:'night-pick', sel: a?.target,
         marks: u => pack.filter(w => actions[w]?.n === n && actions[w].target === u).map(w => ({ label: initials(w), title: nameOf(w) }))
           .concat(a?.target === u ? [{ label:'You', you:true }] : []) });
   }
   if(r === 'seer'){
-    if(!a) return `<h2>Choose someone to see through</h2><p class="hint">You will learn whether they are a wolf.</p>` + playerList(al.filter(u => u !== myUid), { act:'night-pick' });
+    if(!a) return `<h2>Whose true nature will you see?</h2><p class="hint">Pick anyone. You will learn whether they are a wolf.</p>` + playerList(al.filter(u => u !== myUid), { act:'night-pick' });
     const res = mySecret.seen?.[n];
-    return `<div class="card serif">${res ? `${esc(nameOf(res.target))} ${res.wolf ? '<span class="wolfc">is a wolf.</span>' : 'is not a wolf.'}` : 'The vision is forming\u2026'}</div>` + fillerUI(n);
+    return fillerUI(n, res ? `Your vision: ${esc(nameOf(res.target))} ${res.wolf ? 'IS a wolf.' : 'is not a wolf.'}` : 'Your vision is forming\u2026');
   }
   if(r === 'doctor'){
-    if(!a) return `<h2>Choose someone to protect</h2><p class="hint">If the wolves come for them tonight, they live.</p>` + playerList(al, { act:'night-pick' });
-    return `<div class="card serif">You stand guard over ${esc(nameOf(a.target))} tonight.</div>` + fillerUI(n);
+    if(!a) return `<h2>Whom will you protect tonight?</h2><p class="hint">Pick anyone, yourself included. If the wolves come for them, they live.</p>` + playerList(al, { act:'night-pick' });
+    return fillerUI(n, `You stand guard over ${esc(nameOf(a.target))} tonight.`);
   }
   if(r === 'witch'){
     const p = mySecret.potions || {};
     if(a?.done){
       const bits = []; if(a.save) bits.push('Your healing draught is ready.'); if(a.kill) bits.push(`Poison waits for ${esc(nameOf(a.kill))}.`);
-      return `<div class="card serif">${bits.join(' ') || 'You keep your potions corked tonight.'}</div>` + fillerUI(n);
+      return fillerUI(n, bits.join(' ') || 'You keep your potions corked tonight.');
     }
     const sn = mySecret.night?.n === n ? mySecret.night : null;
-    if(!sn || (!p.save && !p.kill && !sn)) return fillerUI(n);
-    if(!p.save && !p.kill) return `<div class="card serif">Your potions are spent. You can only watch.</div><div class="row"><button class="btn" data-act="witch-none">Close the cauldron</button></div>`;
-    if(witchKillMode) return `<h2>Who drinks the poison?</h2><p class="hint">This cannot be undone.</p>` +
-      playerList(al.filter(u => u !== myUid), { act:'witch-kill' }) + `<div class="row"><button class="btn" data-act="witch-cancel">Back</button></div>`;
-    const t = sn.wolfTarget, both = settingsOf(game).witchBoth;
-    return `<h2>${t ? `The wolves have chosen ${esc(nameOf(t))}` : 'The wolves could not agree tonight'}</h2>
-      <p class="hint">Potions left: ${[p.save ? 'save' : '', p.kill ? 'kill' : ''].filter(Boolean).join(' and ') || 'none'}.</p>
-      <div class="row">
-        ${t && p.save ? `<button class="btn pri" data-act="witch-save">Save ${esc(nameOf(t))}</button>` : ''}
-        ${p.kill ? `<button class="btn blood" data-act="witch-killmode">Use the kill potion</button>` : ''}
-        ${t && p.save && p.kill && both ? `<button class="btn blood" data-act="witch-bothmode">Save and kill</button>` : ''}
-        <button class="btn" data-act="witch-none">Do nothing</button>
-      </div>`;
+    if(!sn) return fillerUI(n);                                   // the wolves are still choosing
+    if(witchNight !== n){ witchNight = n; witchSave = false; witchStep = (sn.wolfTarget && p.save) ? 'save' : 'kill'; }
+    if(witchStep === 'save'){
+      const t = sn.wolfTarget;
+      return `<h2>The wolves have killed a villager</h2><p class="hint">Optional: to save them, tap the name marked dead.</p>` +
+        playerList(al, { act:'witch-pick', marks: u => u === t ? [{ label:'dead' }] : [] }) + noOne('witch-skip', 'Let them die');
+    }
+    if(!p.kill || (witchSave && !settingsOf(game).witchBoth)) return fillerUI(n, 'Your potions are set for the night.');
+    return `<h2>Poison someone?</h2><p class="hint">Optional: poison anyone you think is a wolf, or for reasons of your own.</p>` +
+      playerList(al.filter(u => u !== myUid), { act:'witch-pick' }) + noOne('witch-skip', 'No one tonight');
   }
   return fillerUI(n);
 }
-let witchSaveToo = false;
 function dayPanel(ph){
   const s = settingsOf(game), al = aliveUids(), meAlive = isAlive(myUid);
   const readyCount = al.filter(u => ph.ready?.[u]).length;
@@ -1274,13 +1274,18 @@ document.addEventListener('click', async e => {
       case 'clearbots': { const up = {}; for(const b of uids().filter(x => players()[x].bot)) up[`players.${b}`] = null; return upd(up); }
       case 'role': roleOpen = !roleOpen; clearTimeout(roleTimer); if(roleOpen) roleTimer = setTimeout(() => { roleOpen = false; renderRole(); }, 10000); return renderRole();
       case 'filler': return act('filler', { u });
+      case 'filler-none': return act('filler', { u: null });
       case 'night-pick': return act('night-pick', { u });
-      case 'witch-save': return act('witch', { save:true });
-      case 'witch-none': return act('witch', {});
-      case 'witch-killmode': witchKillMode = true; witchSaveToo = false; return render();
-      case 'witch-bothmode': witchKillMode = true; witchSaveToo = true; return render();
-      case 'witch-cancel': witchKillMode = false; return render();
-      case 'witch-kill': return act('witch', { save: witchSaveToo, kill: u });
+      case 'witch-pick': case 'witch-skip': {
+        const sn = mySecret?.night, p = mySecret?.potions || {}, both = settingsOf(game).witchBoth;
+        if(witchStep === 'save'){
+          if(a === 'witch-pick' && u !== sn?.wolfTarget) return;            // only the marked victim can be saved
+          witchSave = a === 'witch-pick';
+          if(p.kill && (both || !witchSave)){ witchStep = 'kill'; return render(); }
+          return act('witch', { save: witchSave });
+        }
+        return act('witch', { save: witchSave, kill: a === 'witch-pick' ? u : null });
+      }
       case 'accuse': return act('accuse', { u });
       case 'ready': return act('ready');
       case 'vote': return act('vote', { u });
