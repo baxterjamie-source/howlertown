@@ -1058,7 +1058,7 @@ function fillerUI(n, note){
         .concat(mine === u ? [{ label:'You', you:true }] : []) }) + noOne(fillerPicked ? '' : 'filler-none', 'No one');
 }
 const noOne = (act, label) => `<div class="list" style="margin-top:7px"><button class="pl" data-act="${act}"><span>${label}</span><span class="marks"></span></button></div>`;
-let witchStep = null, witchNight = 0, witchSave = false;
+let witchStep = null, witchNight = 0, witchSave = false, seerNight = 0, seerShow = true;
 function nightPanel(ph){
   const n = ph.n, r = mySecret?.role, a = myAct(n), al = aliveUids();
   if(r === 'werewolf'){
@@ -1073,9 +1073,12 @@ function nightPanel(ph){
           .concat(a?.target === u ? [{ label:'You', you:true }] : []) });
   }
   if(r === 'seer'){
-    if(!a) return `<h2>Whose true nature will you see?</h2><p class="hint">Pick anyone. You will learn whether they are a wolf.</p>` + playerList(al.filter(u => u !== myUid), { act:'night-pick' });
-    const res = mySecret.seen?.[n];
-    return fillerUI(n, res ? `Your vision: ${esc(nameOf(res.target))} ${res.wolf ? 'IS a wolf.' : 'is not a wolf.'}` : 'Your vision is forming\u2026');
+    // The list stays up all night. Yes/No sits beside the checked name; tapping any other name hides it, tapping theirs shows it again.
+    if(seerNight !== n){ seerNight = n; seerShow = true; }
+    const res = a ? mySecret.seen?.[n] : null;
+    return `<h2>Whose true nature will you see?</h2><p class="hint">Pick anyone. You will learn whether they are a wolf.</p>` +
+      playerList(al.filter(u => u !== myUid), { act: a ? 'seer-tap' : 'night-pick',
+        marks: u => res && seerShow && u === res.target ? [{ label: res.wolf ? 'Yes' : 'No' }] : [] });
   }
   if(r === 'doctor'){
     if(!a) return `<h2>Whom will you protect tonight?</h2><p class="hint">Pick anyone, yourself included. If the wolves come for them, they live.</p>` + playerList(al, { act:'night-pick' });
@@ -1235,7 +1238,9 @@ function renderRole(){
     $('role-name').textContent = roleName(r);
     const pack = r === 'werewolf' ? (mySecret.pack || []).filter(u => u !== myUid) : [];
     const pot = r === 'witch' && mySecret.potions ? ` Left: ${[mySecret.potions.save ? 'save' : '', mySecret.potions.kill ? 'kill' : ''].filter(Boolean).join(' and ') || 'nothing'}.` : '';
-    $('role-text').textContent = ROLES[r].text + (pack.length ? ` Your pack: ${nameList(pack.map(nameOf))}.` : '') + pot;
+    const seen = r === 'seer' ? Object.entries(mySecret.seen || {}).filter(([, v]) => v?.target).sort((x, y) => x[0] - y[0]) : [];
+    const visions = seen.length ? ' Your visions: ' + seen.map(([n, v]) => `Night ${n}, ${nameOf(v.target)}: ${v.wolf ? 'wolf' : 'not a wolf'}.`).join(' ') : '';
+    $('role-text').textContent = ROLES[r].text + (pack.length ? ` Your pack: ${nameList(pack.map(nameOf))}.` : '') + pot + visions;
   } else { $('seal').textContent = '?'; $('role-name').textContent = 'Tap to view role'; $('role-text').textContent = ''; }
   const st = $('role-stat'), al = isAlive(myUid);
   st.textContent = al ? '(alive)' : '(dead)'; st.className = 'rstat ' + (al ? 'alive' : 'dead');
@@ -1276,6 +1281,7 @@ document.addEventListener('click', async e => {
       case 'filler': return act('filler', { u });
       case 'filler-none': return act('filler', { u: null });
       case 'night-pick': return act('night-pick', { u });
+      case 'seer-tap': seerShow = u === mySecret?.seen?.[game?.phase?.n]?.target; return render();
       case 'witch-pick': case 'witch-skip': {
         const sn = mySecret?.night, p = mySecret?.potions || {}, both = settingsOf(game).witchBoth;
         if(witchStep === 'save'){
