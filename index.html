@@ -164,8 +164,17 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
 .c-players h3{font-family:var(--serif);font-weight:400;margin:0 0 .4em;font-size:1.3em}
 .c-players .c-chips{display:flex;flex-wrap:wrap;gap:.4em}
 .c-players .c-chips span{border:1px solid var(--line);border-radius:999px;padding:.15em .7em;background:rgba(7,9,15,.6)}
-.c-leave{position:absolute;right:1.5vw;bottom:1.5vh;pointer-events:auto;opacity:.25;font-size:13px}
+.c-leave{opacity:.35}
 .c-leave:hover,.c-leave:focus-visible{opacity:1}
+/* ---- Sound button, panel and test-mode captions ---- */
+#sndui{position:fixed;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:40;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+#sndui .row{margin:0;justify-content:flex-end}
+#sndui .btn{background:rgba(15,19,32,.85)}
+#sndui .note{text-shadow:0 1px 4px #000}
+.sndpanel{background:var(--slate);border:1px solid var(--line);border-radius:14px;padding:12px 16px;width:min(320px,calc(100vw - 24px));font-size:16px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.sndpanel b{font-family:var(--serif);font-weight:400;font-size:19px}
+#sndcap{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:60;pointer-events:none;display:flex;flex-direction:column;gap:4px;align-items:center}
+#sndcap div{background:rgba(15,19,32,.88);border:1px solid var(--ember);color:var(--ember);border-radius:999px;padding:4px 12px;font-size:15px;white-space:nowrap}
 .c-paused{color:var(--rose)}
 .hidden{display:none!important}
 </style></head><body>
@@ -202,6 +211,7 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
 </section>
 </div></div>
 <div id="crier"></div>
+<div id="sndui"></div>
 <div id="reveal" class="overlay hidden" data-act="dismiss-reveal"></div>
 <div id="finale" class="overlay finale hidden"></div>
 <script type="module">
@@ -225,15 +235,124 @@ const firebaseConfig = {
 const GAMES = 'howlertown_games';
 let MOCK = new URLSearchParams(location.search).has('mock');
 
-// ---- 2. SOUND SLOTS (silent for now) ----------------------------------------
-// Drop in recorded files later: put a URL (or data: URI) against each slot.
-// Sounds will only ever play from the host phone (later: the Town Crier).
+// ---- 2. SOUND ------------------------------------------------------------------
+// Sound plays on one device only: the first Town Crier, or the host's phone when no Crier is connected.
+// Each slot lists files in the sounds/ folder next to index.html; one is picked at random.
+// A missing file is simply silent, so slots can be filled in one at a time.
 const SOUNDS = {
-  nightfall: null, nightAmbience: null, wolvesDeadlocked: null, dawn: null,
-  victimFound: null, nobodyDied: null, accusation: null, voteResult: null,
-  wolvesWin: null, villageWins: null, timerWarning: null,
+  // Ambient
+  wind:        { cat:'ambient', label:'Wind',             files:['wind.mp3'] },
+  howlFar:     { cat:'ambient', label:'Distant howl',     files:['howl-distant.mp3'], vol:.6 },
+  murmur:      { cat:'ambient', label:'Crowd murmur',     files:['murmur.mp3'], vol:.35, loop:true },
+  bell:        { cat:'ambient', label:'Village bell',     files:['bell.mp3'] },
+  // Events
+  howlLoud:    { cat:'event',   label:'Loud howl',        files:['howl-loud.mp3'] },
+  cackle:      { cat:'event',   label:'Witch’s cackle', files:['witch-cackle.mp3'], vol:.8 },
+  snarl:       { cat:'event',   label:'Wolf snarl',       files:['wolf-snarl.mp3'], vol:.8 },
+  deathReveal: { cat:'event',   label:'Door creak / scream', files:['death-reveal.mp3'] },
+  gavel:       { cat:'event',   label:'Gavel / gasp',     files:['gavel.mp3'] },
+  trapdoor:    { cat:'event',   label:'Trapdoor drop',    files:['trapdoor.mp3'] },
+  villageWin:  { cat:'event',   label:'Village wins',     files:['village-win.mp3'] },
+  foolWin:     { cat:'event',   label:'Town Fool wins',   files:['fool-win.mp3'] },
 };
-function playSound(slot){ /* intentionally silent in the light build */ }
+// Each device keeps its own switches and volume (the Crier's matter most).
+const soundPrefs = (() => { try{ return { ambient:true, event:true, narrator:true, volume:.8, ...JSON.parse(localStorage.getItem('howlertown_sound') || '{}') }; }
+  catch{ return { ambient:true, event:true, narrator:true, volume:.8 }; } })();
+const saveSoundPrefs = () => { try{ localStorage.setItem('howlertown_sound', JSON.stringify(soundPrefs)); }catch{} };
+let actx = null, master = null; const buffers = {}, loops = {};
+function audio(){
+  if(!actx){ try{ actx = new (window.AudioContext || window.webkitAudioContext)(); master = actx.createGain(); master.gain.value = soundPrefs.volume; master.connect(actx.destination); }catch{ return null; } }
+  return actx;
+}
+const audioLocked = () => !actx || actx.state !== 'running';
+// Browsers only allow sound after a click or tap on the page.
+document.addEventListener('pointerdown', () => { const c = audio(); if(c && c.state !== 'running') c.resume().then(() => render()).catch(() => {}); }, true);
+function loadBuffer(file){
+  if(!(file in buffers)) buffers[file] = fetch('sounds/' + file).then(r => r.ok ? r.arrayBuffer() : null).then(b => b && audio().decodeAudioData(b)).catch(() => null);
+  return buffers[file];
+}
+const isSoundDevice = () => !!game && (crier ? liveCriers()[0] === crierId : isHost() && !liveCriers().length);
+// In test mode the sound device shows a caption for every sound, so timing can be checked before the files exist.
+function soundCaption(text){
+  if(!settingsOf(game).test.on) return;
+  let el = $('sndcap'); if(!el){ el = document.createElement('div'); el.id = 'sndcap'; document.body.appendChild(el); }
+  const line = document.createElement('div'); line.textContent = '♪ ' + text; el.appendChild(line);
+  setTimeout(() => line.remove(), 3000);
+}
+async function playSound(slot, o = {}){
+  const s = SOUNDS[slot]; if(!s || !isSoundDevice() || !soundPrefs[s.cat]) return;
+  soundCaption(s.label);
+  const c = audio(); if(!c || audioLocked()) return;
+  const buf = await loadBuffer(rnd(s.files)); if(!buf) return;
+  const src = c.createBufferSource(), g = c.createGain();
+  src.buffer = buf; src.loop = !!s.loop; g.gain.value = (s.vol || 1) * (o.vol || 1);
+  src.connect(g); g.connect(master); src.start();
+  return { src, g };
+}
+async function startLoop(slot){ if(loops[slot]) return; loops[slot] = 'starting'; const h = await playSound(slot); if(loops[slot] === 'starting') loops[slot] = h || 'silent'; else h?.src.stop(); }
+function stopLoop(slot){ const h = loops[slot]; delete loops[slot]; if(h && h.src) try{ h.src.stop(); }catch{} }
+function stopAllLoops(){ Object.keys(loops).forEach(stopLoop); }
+// Watches the public game record and plays what each change calls for. Every device runs it,
+// but only the sound device makes noise. The first look after loading never plays anything.
+let soundKey = undefined, soundTimers = [];
+const later = (ms, fn) => soundTimers.push(setTimeout(fn, ms));
+function soundWatch(){
+  const ph = game?.phase || {}, key = game ? `${game.gameNo}|${game.status}|${ph.name}|${ph.n}|${ph.round || ''}` : null;
+  if(key === soundKey) return;
+  const first = soundKey === undefined; soundKey = key;
+  soundTimers.forEach(clearTimeout); soundTimers = [];
+  if(!(game?.status === 'playing' && ph.name === 'day')) stopLoop('murmur');
+  if(first || !game || !isSoundDevice()) return;
+  if(game.status === 'ended'){ const w = game.result?.winner;
+    if(w === 'wolves') playSound('howlLoud'); else if(w === 'village') playSound('villageWin'); else if(w === 'fool') playSound('foolWin');
+    return; }
+  if(game.status !== 'playing') return;
+  if(ph.name === 'night') later(2000, () => playSound('howlLoud'));
+  if(ph.name === 'dawn' && ph.deaths?.length) playSound('deathReveal');
+  if(ph.name === 'day') startLoop('murmur');
+  if(ph.name === 'vote' && ph.round !== 2) playSound('bell');
+  if(ph.name === 'verdict'){ playSound('gavel');
+    if(ph.eliminated){ later(1500, () => playSound('trapdoor'));
+      if(game.foolWon === ph.eliminated) later(3500, () => playSound('foolWin')); } }
+}
+// Random night ambience, checked once a second: wind, distant howls, snarls, and the Witch while she lives.
+setInterval(() => {
+  const ph = game?.phase;
+  if(game && !isSoundDevice()) stopAllLoops();                  // a Crier joined, so the host goes quiet
+  if(game) renderSoundUI();                                      // the sound device can change as Criers come and go
+  if(!ph || game.status !== 'playing' || ph.name !== 'night' || ph.pausedAt || !isSoundDevice()) return;
+  if(now() - ph.startedAt < 4000 || now() - lastNightSound < 6000) return;   // let the loud howl have the opening; no pile-ups
+  const r = Math.random(), pick = r < 1 / 22 ? 'wind' : r < 1 / 22 + 1 / 35 ? 'howlFar' : r < 1 / 22 + 1 / 35 + 1 / 45 ? 'snarl'
+    : ph.witchAlive && r < 1 / 22 + 1 / 35 + 1 / 45 + 1 / 60 ? 'cackle' : null;
+  if(pick){ lastNightSound = now(); playSound(pick); }
+}, 1000);
+let lastNightSound = 0;
+// The sound panel: on the sound device only (the Crier, or the host when there's no Crier).
+let soundOpen = false;
+function soundPanelHTML(){
+  if(!soundOpen) return '';
+  const sw = (k, label) => `<label class="f">${label}<select data-snd="${k}"><option value="true" ${soundPrefs[k] ? 'selected' : ''}>On</option><option value="false" ${soundPrefs[k] ? '' : 'selected'}>Off</option></select></label>`;
+  return `<div class="sndpanel"><b>Sound</b>${sw('ambient', 'Ambient sounds')}${sw('event', 'Event sounds')}${sw('narrator', 'Narrator')}
+    <label class="f">Volume<input type="range" min="0" max="1" step="0.05" data-snd="volume" style="max-width:55%"></label>
+    <div class="row"><button class="btn small" data-act="snd-test">Test sound</button><button class="btn small" data-act="snd-close">Close</button></div>
+    <p class="note">Missing sound files are silent. Put them in the sounds/ folder next to index.html.</p></div>`;
+}
+function soundButtonHTML(){
+  if(!game || !isSoundDevice()) return crier && game ? '<span class="note">Sound plays on the first Town Crier.</span>' : '';
+  return `<button class="btn small" data-act="snd-open">Sound</button>` + (audioLocked() ? ` <button class="btn small pri" data-act="snd-unlock">Click to enable sound</button>` : '');
+}
+function renderSoundUI(){
+  const show = game && (crier || isSoundDevice());
+  setHTML('sndui', !show ? '' : soundPanelHTML() + `<div class="row">${soundButtonHTML()}${crier ? '<button class="btn small c-leave" data-act="crier-leave">Leave Town Crier</button>' : ''}</div>`);
+  const v = document.querySelector('[data-snd=volume]'); if(v && document.activeElement !== v) v.value = soundPrefs.volume;
+}
+// The test plays a short chime even with no files, to prove the speakers work.
+function testChime(){
+  const c = audio(); if(!c) return; c.resume();
+  const o = c.createOscillator(), g = c.createGain(); o.frequency.value = 660; g.gain.setValueAtTime(.0001, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(.4, c.currentTime + .02); g.gain.exponentialRampToValueAtTime(.0001, c.currentTime + .6);
+  o.connect(g); g.connect(master); o.start(); o.stop(c.currentTime + .65);
+}
 
 // ---- 3. DATA LAYER ------------------------------------------------------------
 let DB;
@@ -513,14 +632,14 @@ async function startNight(n){
   if(wolves >= al.length - wolves){
     wolfEndsAt = s.parityTimer === 'short' ? t + d.night * 500 : s.parityTimer === 'sudden' ? t + 15000 : null;
   }
-  await upd({ phase: { name:'night', n, startedAt:t, endsAt: t + d.night * 1000, wolfEndsAt, parity: wolfEndsAt !== null || wolves >= al.length - wolves } });
-  playSound(n === 1 ? 'nightfall' : 'nightfall');
+  // witchAlive is public on purpose: the sound device cackles only while she lives.
+  await upd({ phase: { name:'night', n, startedAt:t, endsAt: t + d.night * 1000, wolfEndsAt, parity: wolfEndsAt !== null || wolves >= al.length - wolves,
+    witchAlive: al.some(u => secrets[u]?.role === 'witch') } });
 }
 async function lockWolves(n, target, failed){
   await DB.set(`${gp()}/private/night`, { n, wolfTarget: target, wolfFailed: failed });
   const witch = aliveUids().find(u => secrets[u]?.role === 'witch');
   if(witch) await DB.update(sp(witch), { night: { n, wolfTarget: target, wolfFailed: failed } });
-  if(failed) playSound('wolvesDeadlocked');
 }
 async function stepNight(ph, t){
   const n = ph.n, al = aliveUids(), d = dur(settingsOf(game));
@@ -577,7 +696,6 @@ async function resolveNight(ph){
   for(const u of deaths){ up[`players.${u}.alive`] = false;
     if(s.reveal){ up[`revealed.${u}`] = secrets[u]?.role || 'villager'; up[`revealedArt.${u}`] = artOf(u); } }
   await upd(up);
-  playSound(deaths.length ? 'victimFound' : 'nobodyDied');
 }
 async function afterDeaths(next){
   const ph = game.phase;
@@ -629,7 +747,6 @@ async function stepVote(ph, t){
     if(secrets[eliminated]?.role === 'fool'){ up.foolWon = eliminated; up.phase.foolEnd = s.foolWin === 'end'; }
   }
   await upd(up);
-  playSound('voteResult');
 }
 const teamOf = r => r === 'werewolf' ? 'wolves' : r === 'fool' ? 'fool' : 'village';
 // Points: winning team 1 (2 if still alive); losing team 0; the Fool 2 only if hanged, otherwise 0.
@@ -655,7 +772,6 @@ async function endGame(winner){
   const up = { status:'ended', result: { winner, at: now(), points }, revealed: rev, revealedArt: rart, phase: { name:'ended', n: game.phase?.n || 0 } };
   for(const u of uids()) up[`players.${u}.score`] = (players()[u].score || 0) + (points[u] || 0);
   await upd(up);
-  playSound(winner === 'wolves' ? 'wolvesWin' : 'villageWins');
 }
 let ticking = false;
 async function hostTick(){
@@ -812,6 +928,7 @@ function leaveListeners(){ unsubs.forEach(u => u()); unsubs = []; hostSubs.forEa
   game = null; actions = {}; secrets = {}; mySecret = null; filler = {}; night = null; history = {}; }
 function leaveGame(){ leaveListeners(); code = null; ls.del('howlertown_current_game'); showHome(); }
 function showHome(){
+  stopAllLoops(); soundKey = undefined; soundOpen = false; setHTML('sndui', '');
   $('home').classList.remove('hidden'); $('lobby').classList.add('hidden'); $('game').classList.add('hidden');
   $('in-name').value = myName; setScene('night'); fitTagline();
   if(!unsubOpen) unsubOpen = DB.openGames(list => {
@@ -858,6 +975,7 @@ function playerList(list, opts = {}){
 const initials = u => { const p = nameOf(u).trim().split(/\s+/); return (p.length > 1 ? p[0][0] + p[p.length - 1][0] : p[0].slice(0, 2)).toUpperCase(); };
 function render(){
   if(!game) return;
+  soundWatch(); renderSoundUI();
   $('home').classList.add('hidden');
   if(crier) return renderCrier();
   if(game.status === 'lobby'){ $('lobby').classList.remove('hidden'); $('game').classList.add('hidden'); setScene('night'); renderLobby();
@@ -1397,19 +1515,19 @@ function crierDetail(ph){
   return '';
 }
 function renderCrier(){
-  const ph = game.phase || {}, leave = '<button class="btn small c-leave" data-act="crier-leave">Leave Town Crier</button>';
+  const ph = game.phase || {};
   if(game.status === 'lobby'){
     setScene('night'); if(finaleStage){ finaleStage = 0; renderFinale(); }
     const url = joinURL(), qr = qrImage(url), list = uids();
     setHTML('crier', `<div class="c-lobby"><div class="c-join"><div style="font-size:1.4em">Join Howlertown</div><div class="c-code">${esc(code)}</div>` +
       (qr ? `<div class="c-qr"><img src="${qr}" alt="QR code to join"></div>` : '') + `<div class="c-url">${esc(url)}</div></div>` +
       `<div class="c-players"><h3>Players (${list.length})</h3><div class="c-chips">${list.map(u => `<span>${esc(nameOf(u))}</span>`).join('')}</div>` +
-      `<p class="note" style="margin-top:1em">${say('lobby', 0)} The host starts the game when everyone is in.</p></div></div>${leave}`);
+      `<p class="note" style="margin-top:1em">${say('lobby', 0)} The host starts the game when everyone is in.</p></div></div>`);
     renderReveal(); renderBannerScene(); return;
   }
   setScene(sceneFor(ph.name));
   setHTML('crier', `<div class="c-top"><div class="c-ph">${esc(phaseLabel(ph))}${ph.pausedAt ? ' <span class="c-paused">· Paused</span>' : ''}</div><div class="c-clock" id="c-clock"></div></div>` +
-    crierSide() + `<div class="c-main"><p class="c-narr">${esc(narrFor(ph))}</p><div class="c-detail">${crierDetail(ph)}</div></div>${leave}`);
+    crierSide() + `<div class="c-main"><p class="c-narr">${esc(narrFor(ph))}</p><div class="c-detail">${crierDetail(ph)}</div></div>`);
   tickClock(); renderReveal(); renderBannerScene(); maybeFinale();
 }
 
@@ -1453,6 +1571,10 @@ document.addEventListener('click', async e => {
       case 'joincode': return joinGame($('in-code').value);
       case 'crier-join': return joinAsCrier($('in-code').value);
       case 'crier-leave': return leaveCrier();
+      case 'snd-open': soundOpen = true; return renderSoundUI();
+      case 'snd-close': soundOpen = false; return renderSoundUI();
+      case 'snd-unlock': await audio()?.resume(); return render();
+      case 'snd-test': testChime(); soundCaption('Test chime'); return;
       case 'join': return joinGame(el.dataset.code);
       case 'leave':
         if(game?.status === 'lobby' && !isHost()) await DB.update(gp(), { [`players.${myUid}`]: null });
@@ -1501,6 +1623,16 @@ document.addEventListener('click', async e => {
     }
   }catch(err){ console.error(err); alert('Something went wrong: ' + err.message); }
 });
+// Sound switches and volume belong to this device only.
+document.addEventListener('input', e => {
+  const el = e.target.closest('[data-snd]'); if(!el) return;
+  const k = el.dataset.snd;
+  soundPrefs[k] = k === 'volume' ? +el.value : el.value === 'true';
+  if(k === 'volume' && master) master.gain.value = soundPrefs.volume;
+  if(k === 'ambient' && !soundPrefs.ambient) stopAllLoops();
+  if(k === 'ambient' && soundPrefs.ambient && game?.status === 'playing' && game.phase?.name === 'day') startLoop('murmur');
+  saveSoundPrefs();
+});
 document.addEventListener('change', e => {
   const el = e.target.closest('[data-set]'); if(!el || !isHost()) return;
   let v = el.value; if(v === 'true') v = true; else if(v === 'false') v = false; else if(/^\d+$/.test(v)) v = +v;
@@ -1519,7 +1651,7 @@ if(document.fonts) document.fonts.ready.then(fitTagline);
 // ---- 15. START ---------------------------------------------------------------------
 (async () => {
   await initDB();
-  if(MOCK) window.__ht = { DB: () => DB, path: () => gp(), game: () => game, uids };   // offline test hook
+  if(MOCK) window.__ht = { DB: () => DB, path: () => gp(), game: () => game, uids, sound: () => ({ device: isSoundDevice(), locked: audioLocked(), loops: Object.keys(loops), buffers }) };   // offline test hook
   $('mocknote').textContent = MOCK ? 'Offline test mode: games live only in this browser. Turn on Test mode in the lobby and add bots. To try the Town Crier, open this page in a second tab and join with the code.' : '';
   // ?crier=CODE opens straight into Town Crier mode (handy as a TV bookmark); ?join=CODE fills in the code.
   const q = new URLSearchParams(location.search);
