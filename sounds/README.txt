@@ -12,6 +12,8 @@ Ambient (Sound panel: "Ambient sounds")
 
 Events (Sound panel: "Event sounds")
   howl-loud.mp3       Loud howls. 2 seconds after night falls, and when the wolves win.
+  howl-card.mp3       A single howl. During the card deal, once for every card drawn
+                      (the wolf by the well throws its head back each time). About 2 seconds long is ideal.
   witch-cackle.mp3    Witch's cackle. At random during the night, only while the Witch is alive.
   wolf-snarl.mp3      Mauling / snarling. At random during the night.
   death-reveal.mp3    Door creak or scream. When dawn reveals who died.
