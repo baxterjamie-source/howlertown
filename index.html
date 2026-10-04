@@ -12,14 +12,15 @@ box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:en
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
 body{margin:0;background:#07090f;color:var(--parch);font-family:var(--sans);font-size:17px;line-height:1.45}
-.app{position:relative;max-width:480px;margin:0 auto;min-height:100vh;background:var(--ink)}
+.app{position:relative;max-width:480px;margin:0 auto;min-height:100vh;background:var(--ink);overflow-x:clip}
+html,body{overflow-x:hidden}   /* rising names and smoke must never widen the page on a phone */
 .banner{position:relative;height:clamp(200px,32vh,290px);overflow:hidden;background:#0a0d16}
 .banner svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 .banner::after{content:"";position:absolute;left:0;right:0;bottom:0;height:56px;background:linear-gradient(to bottom,transparent,var(--ink));pointer-events:none}
 .bg{transition:opacity 3s ease}
 @media (prefers-reduced-motion: reduce){.bg{transition:none}}
 .wordmark{position:absolute;left:18px;top:12px;font-family:var(--serif);font-size:26px;color:var(--parch);text-shadow:0 2px 10px #000;z-index:2}
-.wrap{padding:6px 20px 32px}
+.wrap{padding:6px 20px 72px}   /* room at the bottom for the floating Sound button */
 .top{display:flex;justify-content:space-between;align-items:baseline;color:var(--dim);font-size:15px;gap:10px}
 .timer{font-variant-numeric:tabular-nums}
 .narr{font-family:var(--serif);font-size:21px;line-height:1.42;margin:10px 0 16px;color:#f1e7cf}
@@ -176,6 +177,34 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
 #sndcap{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:60;pointer-events:none;display:flex;flex-direction:column;gap:4px;align-items:center}
 #sndcap div{background:rgba(15,19,32,.88);border:1px solid var(--ember);color:var(--ember);border-radius:999px;padding:4px 12px;font-size:15px;white-space:nowrap}
 .c-paused{color:var(--rose)}
+/* ---- The deal: card backs, the fan, rising names and smoke ---- */
+.cb{background:radial-gradient(circle at 50% 42%,#4a1f17,#1c0b08 78%);border:2px solid #c9a35a;border-radius:9%/6%;box-shadow:inset 0 0 0 3px #1c0b08,inset 0 0 0 4px #8a6a32,0 6px 14px rgba(0,0,0,.6)}
+.cb::before{content:"";position:absolute;left:50%;top:50%;width:64%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:var(--wolf) center/cover;border:2px solid #c9a35a;box-shadow:0 0 0 2px #1c0b08}
+.cb::after{content:"";position:absolute;inset:7%;border:1px solid rgba(201,163,90,.45);border-radius:6%/4%;pointer-events:none}
+#deal.deal{position:relative;height:var(--dh);margin:16px 0 4px;--k:1;--cw:calc(58px * var(--k));--dh:calc(58px * 2.7);z-index:5}
+.fan{position:absolute;left:50%;bottom:calc(var(--cw) * .8 + 12px);width:0;height:0}
+.cardback{position:absolute;left:calc(var(--cw) / -2);bottom:0;width:var(--cw);height:calc(var(--cw) * 1.45);padding:0;cursor:pointer;transform-origin:50% 400%;transform:rotate(var(--a));transition:transform .25s ease,opacity .4s ease}
+button.cardback:hover,button.cardback:focus-visible{transform:rotate(var(--a)) translateY(-12px)}
+.cardback.gone{opacity:0;transform:rotate(var(--a)) translateY(-70px) scale(.85);pointer-events:none}
+.rise{position:absolute;left:50%;bottom:calc(var(--cw) * 1.45);width:0;height:0;pointer-events:none;z-index:3}
+.risename{position:absolute;left:0;top:0;white-space:nowrap;font-family:var(--serif);font-size:24px;color:#f1e7cf;text-shadow:0 0 14px rgba(224,162,74,.75),0 2px 6px #000}
+.puff{position:absolute;width:var(--pz,48px);height:var(--pz,48px);border-radius:50%;background:radial-gradient(circle,rgba(225,220,230,.8),rgba(180,175,190,.35) 45%,transparent 70%);filter:blur(2px)}
+body.crier #deal.deal{position:fixed;left:0;right:0;bottom:4vh;margin:0;--cw:calc(14vh * var(--k));--dh:42vh;--pz:9vh;z-index:6}
+body.crier .risename{font-size:5.5vh}
+.flycard{position:fixed;z-index:70;perspective:1000px;pointer-events:none}
+.fc-in{position:absolute;inset:0;transform-style:preserve-3d}
+.fc-back,.fc-face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.fc-face{transform:rotateY(180deg);background:linear-gradient(#2c1e14,#120d0a);border:2px solid #c9a35a;border-radius:9%/6%;box-shadow:inset 0 0 0 4px #8a6a32,0 10px 30px rgba(0,0,0,.7);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7%}
+.fc-face b{font-family:var(--serif);font-weight:400;color:#f1e7cf;font-size:calc(var(--w) * .1);text-align:center;padding:0 8%}
+.bigstart{font-family:var(--serif);font-size:24px;padding:18px}
+.c-bigsign{font-family:var(--serif);font-size:2.4em;line-height:1.15;color:var(--ember);text-shadow:0 2px 14px #000}
+.c-bigsign span{display:block;font-size:.5em;color:#f1e7cf;margin-top:.3em}
+/* The role card: face-down (mini card back) until flipped; a dashed spot during the deal. */
+.seal.cb.mini{position:relative;width:34px;height:48px;border-radius:5px;background:radial-gradient(circle at 50% 42%,#4a1f17,#1c0b08 78%)}
+.seal.cb.mini.open{background:linear-gradient(#2c1e14,#120d0a)}
+.seal.cb.mini.open::before{display:none}
+.role.slot{border-style:dashed;background:transparent;cursor:default}
+.role.slot>*{visibility:hidden}
 .hidden{display:none!important}
 </style></head><body>
 <div class="app">
@@ -206,6 +235,7 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
 <div id="hostbar" class="hostbar"></div>
 <p class="narr" id="narr" aria-live="polite"></p>
 <button class="role" id="rolecard" data-act="role" aria-expanded="false"><span class="seal" id="seal">?</span><span><b id="role-name">Tap to view role</b><small id="role-text"></small></span><span class="rstat" id="role-stat"></span></button>
+<div id="deal"></div>
 <div id="panel"></div>
 <div id="seeall"></div>
 </section>
@@ -508,6 +538,8 @@ function lobbyWarnings(n, s){
 // ---- 6. NARRATION (text only for now; spoken voice comes in the polish build) --
 const NARR = {
   lobby: ['Gather round. Night is coming to Howlertown.'],
+  deal: ['Fate deals the cards. Draw one each, glimpse it, and tell no one what you saw.'],
+  dealDone: ['Every card is drawn. Howlertown waits for nightfall.'],
   night1: ['Night falls over Howlertown. The village sleeps. Something in the trees does not.'],
   night: ['Night falls again. Doors are barred, torches gutter, and something past the well is hungry.',
           'Another night over Howlertown. Fewer candles burn in the windows now.',
@@ -608,12 +640,24 @@ async function startGame(){
   }
   await DB.set(`${gp()}/private/night`, { n: 0 });
   await DB.set(`${gp()}/live/filler`, {});
-  const up = { status:'playing', revealed:{}, revealedArt:{}, lastNight:null, result:null, foolWon:null, startedAt: now(), gameNo: (game.gameNo || 0) + 1 };
+  // Roles are already dealt in secret; the deck is the show. The cards appear 2 s after Start,
+  // and Night 1 begins when the host presses Start the game once every card is drawn.
+  const t = now();
+  const up = { status:'playing', revealed:{}, revealedArt:{}, lastNight:null, result:null, foolWon:null, startedAt: t, gameNo: (game.gameNo || 0) + 1,
+    phase: { name:'deal', n:0, startedAt:t, showAt: t + 2000, cards: list.length, picks:{} } };
   for(const u of list) up[`players.${u}.alive`] = true;
   await upd(up);
   secrets = {}; for(const u of list) secrets[u] = { role: deal[u], art: art[u], potions: deal[u] === 'witch' ? { save:true, kill:true } : null };
-  await startNight(1);
 }
+// Drawing a card: a transaction, so two players can't take the same one.
+async function drawCard(u, card){
+  return DB.transact(gp(), g => {
+    const p = g?.phase; if(g?.status !== 'playing' || p?.name !== 'deal' || p.picks?.[u] || !g.players?.[u]) return null;
+    if(card < 0 || card >= p.cards || Object.values(p.picks || {}).some(x => x.card === card)) return null;
+    return { [`phase.picks.${u}`]: { card, at: now() } };
+  });
+}
+const allDrawn = ph => ph?.name === 'deal' && uids().every(u => ph.picks?.[u]);
 // Plain Villagers get the four villager characters at random without replacement, then repeats.
 function assignArt(list, deal){
   const art = {}; let pool = [];
@@ -799,7 +843,13 @@ async function runBots(){
   const others = b => al.filter(u => u !== b);
   for(const b of bots){
     const r = secrets[b]?.role; const a = actions[b];
-    if(ph.name === 'night'){
+    if(ph.name === 'deal'){
+      if(!ph.picks?.[b] && t > ph.showAt + 3000 && Math.random() < .015){
+        const taken = new Set(Object.values(ph.picks || {}).map(x => x.card));
+        const free = [...Array(ph.cards).keys()].filter(i => !taken.has(i));
+        if(free.length) await drawCard(b, rnd(free));
+      }
+    } else if(ph.name === 'night'){
       const n = ph.n, nt = curNight(n), locked = nt && (nt.wolfTarget || nt.wolfFailed), mine = a && a.n === n;
       if(r === 'werewolf' && !locked){
         if(!mine || Math.random() < .2){
@@ -905,6 +955,7 @@ async function joinAsCrier(c){
 }
 function enterCrier(c){
   leaveListeners(); crier = true; code = c; ss.set('howlertown_crier_game', c);
+  document.body.appendChild($('deal'));                      // the deck floats over the big screen
   document.body.classList.add('crier');
   document.querySelector('.banner svg').setAttribute('viewBox', BANNER_VB());
   DB.update(gp(), { [`criers.${crierId}`]: { joinedAt: now(), beat: now() } }).catch(() => {});
@@ -913,7 +964,7 @@ function enterCrier(c){
 function leaveCrier(){
   if(code && game) DB.update(gp(), { [`criers.${crierId}`]: null }).catch(() => {});
   leaveListeners(); crier = false; code = null; ss.del('howlertown_crier_game');
-  document.body.classList.remove('crier'); $('crier').innerHTML = ''; _last.crier = null;
+  document.body.classList.remove('crier'); $('crier').innerHTML = ''; _last.crier = null; $('rolecard').after($('deal'));
   document.querySelector('.banner svg').setAttribute('viewBox', BANNER_VB());
   showHome();
 }
@@ -981,7 +1032,7 @@ function render(){
   if(game.status === 'lobby'){ $('lobby').classList.remove('hidden'); $('game').classList.add('hidden'); setScene('night'); renderLobby();
     statusOpen = false; renderStatus(); renderReveal(); renderBannerScene(); if(finaleStage){ finaleStage = 0; renderFinale(); } return; }
   $('lobby').classList.add('hidden'); $('game').classList.remove('hidden');
-  setScene(sceneFor(game.phase?.name)); renderGame(); renderRole(); tickClock();
+  setScene(sceneFor(game.phase?.name)); renderGame(); renderRole(); renderDeal(); tickClock();
   renderReveal(); renderStatus(); renderBannerScene(); maybeFinale();
 }
 function renderLobby(){
@@ -1371,11 +1422,12 @@ function verdictPanel(ph){
 }
 function revealLine(u){ const r = game.revealed?.[u]; return r ? ` ${nameOf(u)} was ${r === 'werewolf' ? 'a Werewolf' : 'the ' + roleName(r)}.`.replace('the Villager', 'a Villager') : ''; }
 // Phase label and narration line: the same on every phone and on the Town Crier.
-const phaseLabel = ph => ({ night:`Night ${ph.n}`, dawn:'Dawn', day:`Day ${ph.n}`, vote: ph.round === 2 ? 'Runoff' : 'The vote', verdict:'Verdict', ended:'Game over' })[ph.name] || '';
+const phaseLabel = ph => ({ deal:'The deal', night:`Night ${ph.n}`, dawn:'Dawn', day:`Day ${ph.n}`, vote: ph.round === 2 ? 'Runoff' : 'The vote', verdict:'Verdict', ended:'Game over' })[ph.name] || '';
 function narrFor(ph){
   const s = settingsOf(game);
   if(game.status === 'ended'){ const w = game.result?.winner;
     return w === 'none' ? 'The host ended the game early.' : say(w === 'wolves' ? 'wolves' : w === 'fool' ? 'fool' : 'village', 0); }
+  if(ph.name === 'deal') return say(allDrawn(ph) ? 'dealDone' : 'deal', 0);
   if(ph.name === 'night') return say(ph.n === 1 ? 'night1' : 'night', ph.n) + (ph.parity && s.reveal ? ' ' + say('parity', 0) : '');
   if(ph.name === 'dawn'){ const d = ph.deaths || [];
     return d.length ? say('dawnDead', ph.n, { names: nameList(d.map(nameOf)), was: d.length > 1 ? 'were' : 'was' }) : say('dawnNone', ph.n); }
@@ -1405,6 +1457,12 @@ function renderGame(){
         return `<div class="pl${isAlive(u) ? '' : ' dead'}"><span>${esc(nameOf(u))}<br><span class="sub ${r === 'werewolf' ? 'wolfc' : ''}">${esc(roleName(r))}${isAlive(u) ? '' : ', dead'}</span></span><span class="marks"><span class="pts">+${pts[u] || 0}</span><span class="mk" title="Total">${players()[u].score || 0}</span></span></div>`; }).join('')}</div>` +
       `<div class="row">${w !== 'none' ? '<button class="btn" data-act="finale-scores">Final scores</button>' : ''}${host ? '<button class="btn pri" data-act="relobby">Back to the lobby</button>' : ''}<button class="btn" data-act="leave">Leave</button></div>` +
       recapHTML();
+  } else if(ph.name === 'deal'){
+    const drawn = uids().filter(u => ph.picks?.[u]).length, total = uids().length;
+    panel = allDrawn(ph)
+      ? (host ? `<div class="row"><button class="btn pri full bigstart" data-act="deal-begin">Start the game</button></div>`
+              : `<p class="hint">Every card is drawn. Waiting for ${esc(game.hostName || 'the host')} to start the game.</p>`)
+      : `<p class="hint">${ph.picks?.[myUid] ? 'Waiting for the others to draw.' : now() < ph.showAt ? 'Shuffling the cards…' : 'Tap a card to draw your role.'} ${drawn} of ${total} have drawn.</p>`;
   } else if(ph.name === 'night'){
     panel = isAlive(myUid) ? nightPanel(ph) : `<div class="card">You are dead. Watch the night in silence.</div>`;
   } else if(ph.name === 'dawn'){
@@ -1421,7 +1479,7 @@ function renderGame(){
   // Host bar
   const away = !host && game.status === 'playing' && game.hostBeat && now() - game.hostBeat > 20000;
   setHTML('hostbar', host && game.status === 'playing'
-    ? `${s.test.on ? `<button class="btn small" data-act="back" ${backStack.length ? '' : 'disabled'}>Back</button>` : ''}<button class="btn small" data-act="pause">${ph.pausedAt ? 'Resume' : 'Pause'}</button><button class="btn small" data-act="skip" ${ph.pausedAt ? 'disabled' : ''}>Skip ahead</button><button class="btn small blood" data-act="endgame">End game</button>`
+    ? `${s.test.on ? `<button class="btn small" data-act="back" ${backStack.length ? '' : 'disabled'}>Back</button>` : ''}${ph.name === 'deal' ? '' : `<button class="btn small" data-act="pause">${ph.pausedAt ? 'Resume' : 'Pause'}</button><button class="btn small" data-act="skip" ${ph.pausedAt ? 'disabled' : ''}>Skip ahead</button>`}<button class="btn small blood" data-act="endgame">End game</button>`
     : away ? `<button class="btn small pri" data-act="takehost">The host seems to be away. Take over as host</button>` : '');
   // All-seeing view (Test mode, host only)
   if(host && s.test.on && s.test.allSeeing && game.status === 'playing'){
@@ -1493,6 +1551,9 @@ function crierDetail(ph){
   if(game.status === 'ended'){ const w = game.result?.winner, pts = game.result?.points || {};
     return `<h2>${w === 'none' ? 'Game ended early' : w === 'wolves' ? 'The wolves win' : w === 'fool' ? 'The Town Fool wins' : 'The village wins'}</h2>` +
       (w !== 'none' ? `<p class="note">${uids().slice().sort((a, b) => (pts[b] || 0) - (pts[a] || 0)).map(u => `${esc(nameOf(u))} +${pts[u] || 0}`).join(' · ')}</p>` : ''); }
+  if(ph.name === 'deal'){ const drawn = uids().filter(u => ph.picks?.[u]).length;
+    return allDrawn(ph) ? `<div class="c-bigsign">All cards are drawn.<span>Waiting for ${esc(game.hostName || 'the host')} to start the game.</span></div>`
+      : `<p class="hint">${now() < ph.showAt ? 'Shuffling the cards…' : `Draw a card on your phone. ${drawn} of ${uids().length} have drawn.`}</p>`; }
   if(ph.name === 'dawn') return dawnDetail(ph);
   if(ph.name === 'day'){
     if(ph.mode === 'open') return ready();
@@ -1528,7 +1589,110 @@ function renderCrier(){
   setScene(sceneFor(ph.name));
   setHTML('crier', `<div class="c-top"><div class="c-ph">${esc(phaseLabel(ph))}${ph.pausedAt ? ' <span class="c-paused">· Paused</span>' : ''}</div><div class="c-clock" id="c-clock"></div></div>` +
     crierSide() + `<div class="c-main"><p class="c-narr">${esc(narrFor(ph))}</p><div class="c-detail">${crierDetail(ph)}</div></div>`);
-  tickClock(); renderReveal(); renderBannerScene(); maybeFinale();
+  tickClock(); renderDeal(); renderReveal(); renderBannerScene(); maybeFinale();
+}
+
+// ---- The deal: a fanned hand of face-down cards, one per player ----
+// Every screen shows the deck. Each draw removes a card and sends the player's name up one of three
+// paths (shuffled, all three used before any repeats) to vanish in smoke. Your own card rises, flips
+// for a glimpse of your role, flips back and lands as your role card.
+let dealKey = null, dealSeen = new Set(), dealBag = [], dealShowTimer = null, myDrawBusy = false, roleLanded = true;
+const DEAL_VECTORS = [[-0.55, -0.85], [0, -1.15], [0.55, -0.85]];      // up-left, up, up-right (× the rise height)
+const wolfBack = () => `url("${ART.wolf.portrait}")`;
+function renderDeal(){
+  const el = $('deal'), ph = game?.phase;
+  if(!(game?.status === 'playing' && ph?.name === 'deal')){
+    if(dealKey !== null || el.innerHTML){ dealKey = null; el.innerHTML = ''; el.className = ''; }
+    roleLanded = true; return;
+  }
+  if(now() < ph.showAt){ clearTimeout(dealShowTimer); dealShowTimer = setTimeout(render, ph.showAt - now() + 30); return; }
+  const key = `g${game.gameNo}`;
+  if(dealKey !== key){
+    dealKey = key; dealBag = [];
+    dealSeen = new Set(Object.keys(ph.picks || {}));         // cards drawn before this screen opened are just gone
+    roleLanded = true;
+    buildDeck(el, ph);
+  }
+  for(const [u, p] of Object.entries(ph.picks || {})){
+    if(dealSeen.has(u)) continue; dealSeen.add(u);
+    el.querySelector(`[data-card="${p.card}"]`)?.classList.add('gone');
+    riseName(el, nameOf(u));
+  }
+}
+function buildDeck(el, ph){
+  // The hand fans wider and the cards get a little smaller as the group grows, so 16 still fit a phone.
+  const n = ph.cards, spread = Math.min(64, n * 7.5), taken = new Set(Object.values(ph.picks || {}).map(x => x.card));
+  el.className = 'deal'; el.style.setProperty('--wolf', wolfBack());
+  el.style.setProperty('--k', n <= 8 ? 1 : Math.max(.72, 1 - (n - 8) * .035));
+  el.innerHTML = `<div class="fan">${[...Array(n).keys()].map(i => { const a = n > 1 ? -spread / 2 + spread * i / (n - 1) : 0;
+    return `<button class="cardback cb${taken.has(i) ? ' gone' : ''}" data-act="draw" data-card="${i}" style="--a:${a.toFixed(1)}deg" aria-label="Card ${i + 1}"></button>`; }).join('')}</div><div class="rise"></div>`;
+}
+// Names start from the same spot, so draws that land together go up 0.7 s apart.
+let riseNext = 0;
+function riseName(el, name){
+  const wait = Math.max(0, riseNext - now()); riseNext = now() + wait + 700;
+  if(wait) return setTimeout(() => riseNow(el, name), wait);
+  riseNow(el, name);
+}
+function riseNow(el, name){
+  const layer = el.querySelector('.rise'); if(!layer) return;
+  if(!dealBag.length) dealBag = shuffle([0, 1, 2]);
+  const [vx, vy] = DEAL_VECTORS[dealBag.pop()], H = el.clientHeight * (crier ? 0.95 : 1.2);
+  const n = document.createElement('div'); n.className = 'risename'; n.textContent = name; layer.appendChild(n);
+  n.animate([
+    { transform:'translate(-50%,-50%) scale(.8)', opacity:0 },
+    { opacity:1, offset:.12 },
+    { transform:`translate(calc(-50% + ${vx * H}px), calc(-50% + ${vy * H}px)) scale(1.08)`, opacity:1, filter:'blur(0)', offset:.72 },
+    { transform:`translate(calc(-50% + ${vx * H * 1.06}px), calc(-50% + ${vy * H * 1.06}px)) scale(1.25)`, opacity:0, filter:'blur(6px)' },
+  ], { duration:2600, easing:'cubic-bezier(.2,.7,.3,1)', fill:'forwards' });
+  setTimeout(() => puff(layer, vx * H, vy * H), 1750);
+  setTimeout(() => n.remove(), 2700);
+}
+function puff(layer, x, y){
+  for(let i = 0; i < 8; i++){
+    const p = document.createElement('div'), dx = (Math.random() - .5) * 70, dy = (Math.random() - .5) * 30, s = .6 + Math.random() * .8;
+    p.className = 'puff'; p.style.left = x + dx + 'px'; p.style.top = y + dy + 'px'; layer.appendChild(p);
+    p.animate([{ transform:`translate(-50%,-50%) scale(${s * .3})`, opacity:.85 },
+      { transform:`translate(-50%,-50%) translate(${dx * .6}px,${-20 - Math.random() * 30}px) scale(${s * 2.2})`, opacity:0 }],
+      { duration:1100 + Math.random() * 500, easing:'ease-out', fill:'forwards' });
+    setTimeout(() => p.remove(), 1700);
+  }
+}
+async function myDraw(cardEl){
+  const ph = game?.phase;
+  if(crier || myDrawBusy || ph?.name !== 'deal' || ph.picks?.[myUid] || now() < ph.showAt || !players()[myUid]) return;
+  myDrawBusy = true;
+  const r = cardEl.getBoundingClientRect(), from = { x: r.left + r.width / 2, y: r.top + r.height / 2, w: cardEl.offsetWidth, a: parseFloat(cardEl.style.getPropertyValue('--a')) || 0 };
+  const ok = await drawCard(myUid, +cardEl.dataset.card);
+  if(!ok){ myDrawBusy = false; return; }
+  roleLanded = false; renderRole();
+  try{ await cardGlimpse(from); } finally { roleLanded = true; myDrawBusy = false; renderRole(); $('rolecard').animate([{ boxShadow:'0 0 0 0 rgba(224,162,74,.8)' }, { boxShadow:'0 0 0 14px rgba(224,162,74,0)' }], { duration:900 }); }
+}
+// Your card: rise to the middle of the screen, flip to the face, hold, flip back, fly down onto the role card.
+async function cardGlimpse(from){
+  const r = mySecret?.role, art = mySecret?.art, W = Math.min(innerWidth * .56, 240), H = W * 1.45;
+  const c = document.createElement('div'); c.className = 'flycard';
+  c.style.cssText = `left:${innerWidth / 2 - W / 2}px;top:${innerHeight * .42 - H / 2}px;width:${W}px;height:${H}px;--w:${W}px`;
+  c.style.setProperty('--wolf', wolfBack());
+  // The face shows only the role's name in small type: a portrait is too easy to recognise over someone's shoulder.
+  c.innerHTML = `<div class="fc-in"><div class="fc-back cb"></div><div class="fc-face"><b>${esc(r === 'werewolf' ? 'Werewolf' : roleName(r || ''))}</b></div></div>`;
+  document.body.appendChild(c);
+  const inner = c.querySelector('.fc-in'), cx = innerWidth / 2, cy = innerHeight * .42;
+  const go = (el, kf, o) => el.animate(kf, { fill:'forwards', ...o }).finished;
+  await go(c, [{ transform:`translate(${from.x - cx}px,${from.y - cy}px) scale(${from.w / W}) rotate(${from.a}deg)` }, { transform:'none' }], { duration:650, easing:'cubic-bezier(.2,.8,.3,1)' });
+  await go(inner, [{ transform:'rotateY(0)' }, { transform:'rotateY(180deg)' }], { duration:450, easing:'ease-in-out' });
+  await new Promise(res => setTimeout(res, 1300));
+  await go(inner, [{ transform:'rotateY(180deg)' }, { transform:'rotateY(360deg)' }], { duration:450, easing:'ease-in-out' });
+  const s = $('seal').getBoundingClientRect();
+  await go(c, [{ transform:'none', opacity:1 }, { transform:`translate(${s.left + s.width / 2 - cx}px,${s.top + s.height / 2 - cy}px) scale(${s.height / H})`, opacity:1, offset:.85 },
+    { transform:`translate(${s.left + s.width / 2 - cx}px,${s.top + s.height / 2 - cy}px) scale(${s.height / H})`, opacity:0 }], { duration:750, easing:'cubic-bezier(.5,0,.3,1)' });
+  c.remove();
+}
+// The role card flips over (and back) instead of just changing text.
+function flipRole(fn){
+  const card = $('rolecard');
+  card.animate([{ transform:'rotateX(0)' }, { transform:'rotateX(90deg)' }], { duration:150, easing:'ease-in' }).finished
+    .then(() => { fn(); return card.animate([{ transform:'rotateX(-90deg)' }, { transform:'rotateX(0)' }], { duration:150, easing:'ease-out' }).finished; });
 }
 
 let roleOpen = false, roleTimer = null;
@@ -1536,8 +1700,15 @@ function renderRole(){
   const card = $('rolecard'); const r = mySecret?.role;
   card.classList.toggle('hidden', !r);
   card.setAttribute('aria-expanded', roleOpen);
+  // During the deal the role card is an empty, dashed spot until your card lands on it.
+  const ph = game?.phase, waiting = ph?.name === 'deal' && (!ph.picks?.[myUid] || !roleLanded);
+  card.classList.toggle('slot', !!waiting); card.disabled = !!waiting;
+  if(!card.style.getPropertyValue('--wolf')) card.style.setProperty('--wolf', wolfBack());
+  // No character portrait on the open card, only words: a picture can be read over a shoulder.
+  const seal = $('seal'), sealKey = roleOpen && r ? 'face' : 'back';
+  if(seal.dataset.k !== sealKey){ seal.dataset.k = sealKey;
+    seal.className = roleOpen && r ? 'seal cb mini open' : 'seal cb mini'; seal.innerHTML = ''; }
   if(roleOpen && r){
-    $('seal').textContent = roleName(r)[0];
     $('role-name').textContent = roleName(r);
     const pack = r === 'werewolf' ? (mySecret.pack || []).filter(u => u !== myUid) : [];
     const used = mySecret.used || {};
@@ -1547,7 +1718,7 @@ function renderRole(){
     const guarded = r === 'doctor' ? Object.entries(mySecret.guarded || {}).sort((x, y) => x[0] - y[0]).map(([, u]) => nameOf(u)) : [];
     const guards = guarded.length ? ` You have protected: ${guarded.join(', ')}.` : '';
     $('role-text').textContent = ROLES[r].text + (pack.length ? ` Your pack: ${nameList(pack.map(nameOf))}.` : '') + pot + visions + guards;
-  } else { $('seal').textContent = '?'; $('role-name').textContent = 'Tap to view role'; $('role-text').textContent = ''; }
+  } else { $('role-name').textContent = 'Your card'; $('role-text').textContent = waiting ? 'Draw a card below.' : 'Tap to flip it over. Keep it hidden.'; }
   const st = $('role-stat'), al = isAlive(myUid);
   st.textContent = al ? '(alive)' : '(dead)'; st.className = 'rstat ' + (al ? 'alive' : 'dead');
 }
@@ -1590,7 +1761,10 @@ document.addEventListener('click', async e => {
         if(Object.keys(up).length) return upd(up); return;
       }
       case 'clearbots': { const up = {}; for(const b of uids().filter(x => players()[x].bot)) up[`players.${b}`] = null; return upd(up); }
-      case 'role': roleOpen = !roleOpen; clearTimeout(roleTimer); if(roleOpen) roleTimer = setTimeout(() => { roleOpen = false; renderRole(); }, 10000); return renderRole();
+      case 'role': return flipRole(() => { roleOpen = !roleOpen; clearTimeout(roleTimer);
+        if(roleOpen) roleTimer = setTimeout(() => flipRole(() => { roleOpen = false; renderRole(); }), 10000); renderRole(); });
+      case 'draw': return myDraw(el);
+      case 'deal-begin': if(isHost() && allDrawn(game.phase)) return startNight(1); return;
       case 'filler': return act('filler', { u });
       case 'filler-none': return act('filler', { u: null });
       case 'night-pick': return act('night-pick', { u });
