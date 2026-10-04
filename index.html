@@ -906,6 +906,13 @@ async function togglePause(){
 }
 async function skipAhead(){
   const ph = game.phase; if(!ph || ph.pausedAt) return; const t = now();
+  // Test mode, during the deal: draw a random free card for everyone still waiting.
+  if(ph.name === 'deal'){
+    const taken = new Set(Object.values(ph.picks || {}).map(x => x.card));
+    const free = shuffle([...Array(ph.cards).keys()].filter(i => !taken.has(i)));
+    for(const u of uids().filter(u => !ph.picks?.[u])) if(free.length) await drawCard(u, free.pop());
+    return;
+  }
   if(ph.floor) return upd({ 'phase.floor.endsAt': t });
   const up = { 'phase.endsAt': t }; if(ph.wolfEndsAt) up['phase.wolfEndsAt'] = t;
   return upd(up);
@@ -1479,7 +1486,7 @@ function renderGame(){
   // Host bar
   const away = !host && game.status === 'playing' && game.hostBeat && now() - game.hostBeat > 20000;
   setHTML('hostbar', host && game.status === 'playing'
-    ? `${s.test.on ? `<button class="btn small" data-act="back" ${backStack.length ? '' : 'disabled'}>Back</button>` : ''}${ph.name === 'deal' ? '' : `<button class="btn small" data-act="pause">${ph.pausedAt ? 'Resume' : 'Pause'}</button><button class="btn small" data-act="skip" ${ph.pausedAt ? 'disabled' : ''}>Skip ahead</button>`}<button class="btn small blood" data-act="endgame">End game</button>`
+    ? `${s.test.on ? `<button class="btn small" data-act="back" ${backStack.length ? '' : 'disabled'}>Back</button>` : ''}${ph.name === 'deal' ? (s.test.on && !allDrawn(ph) ? '<button class="btn small" data-act="skip">Skip ahead</button>' : '') : `<button class="btn small" data-act="pause">${ph.pausedAt ? 'Resume' : 'Pause'}</button><button class="btn small" data-act="skip" ${ph.pausedAt ? 'disabled' : ''}>Skip ahead</button>`}<button class="btn small blood" data-act="endgame">End game</button>`
     : away ? `<button class="btn small pri" data-act="takehost">The host seems to be away. Take over as host</button>` : '');
   // All-seeing view (Test mode, host only)
   if(host && s.test.on && s.test.allSeeing && game.status === 'playing'){
@@ -1639,14 +1646,16 @@ function riseNow(el, name){
   if(!dealBag.length) dealBag = shuffle([0, 1, 2]);
   const [vx, vy] = DEAL_VECTORS[dealBag.pop()], H = el.clientHeight * (crier ? 0.95 : 1.2);
   const n = document.createElement('div'); n.className = 'risename'; n.textContent = name; layer.appendChild(n);
+  // The name stays solid until the end of its path, then vanishes inside the puff of smoke.
+  const at = `translate(calc(-50% + ${vx * H}px), calc(-50% + ${vy * H}px))`;
   n.animate([
-    { transform:'translate(-50%,-50%) scale(.8)', opacity:0 },
-    { opacity:1, offset:.12 },
-    { transform:`translate(calc(-50% + ${vx * H}px), calc(-50% + ${vy * H}px)) scale(1.08)`, opacity:1, filter:'blur(0)', offset:.72 },
-    { transform:`translate(calc(-50% + ${vx * H * 1.06}px), calc(-50% + ${vy * H * 1.06}px)) scale(1.25)`, opacity:0, filter:'blur(6px)' },
-  ], { duration:2600, easing:'cubic-bezier(.2,.7,.3,1)', fill:'forwards' });
-  setTimeout(() => puff(layer, vx * H, vy * H), 1750);
-  setTimeout(() => n.remove(), 2700);
+    { transform:'translate(-50%,-50%) scale(.8)', opacity:0, easing:'cubic-bezier(.2,.7,.3,1)' },   // eases the glide only
+    { opacity:1, offset:.1 },
+    { transform:`${at} scale(1.08)`, opacity:1, filter:'blur(0)', offset:.85 },
+    { transform:`${at} scale(1.2)`, opacity:0, filter:'blur(5px)' },
+  ], { duration:2300, fill:'forwards' });
+  setTimeout(() => puff(layer, vx * H, vy * H), 1955);                 // the moment the name starts to vanish
+  setTimeout(() => n.remove(), 2400);
 }
 function puff(layer, x, y){
   for(let i = 0; i < 8; i++){
