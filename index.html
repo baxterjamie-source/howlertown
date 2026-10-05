@@ -202,10 +202,14 @@ body.crier .risename{font-size:5.5vh}
 /* ---- Nightfall / dawn animation ---- */
 #intro{position:fixed;inset:0;z-index:58;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4vh;background:radial-gradient(circle at 50% 46%,rgba(22,28,48,.97),rgba(5,7,12,.99) 70%)}
 .intro-title{font-family:var(--serif);color:var(--ember);font-size:clamp(28px,6vh,64px);text-shadow:0 2px 14px #000;letter-spacing:.04em}
-.intro-med{position:relative;width:min(72vw,52vh);aspect-ratio:1}
-.intro-face{position:absolute;inset:0;border-radius:50%;overflow:hidden;opacity:0;border:max(4px,.8vh) solid var(--ember);box-shadow:0 12px 44px rgba(0,0,0,.75);background:radial-gradient(circle at 50% 38%,#3a4560,#171c2b)}
-.intro-face.howl{border-color:#b3352a;box-shadow:0 0 60px rgba(179,53,42,.45),0 12px 44px rgba(0,0,0,.75)}
-.intro-face img{width:100%;height:100%;object-fit:cover;display:block}
+/* The frame (rim + night background) stays still; only the characters inside it change. */
+.intro-wrap{position:relative}
+.intro-med{position:relative;width:min(72vw,52vh);aspect-ratio:1;border-radius:50%;overflow:hidden;border:max(4px,.8vh) solid var(--ember);box-shadow:0 12px 44px rgba(0,0,0,.75);background:radial-gradient(circle at 50% 38%,#3a4560,#171c2b)}
+.intro-face{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;opacity:0}
+/* Magical smoke at the end: soft, uneven clouds, thin in the middle, that split into smaller ones. */
+.intro-puff{position:absolute;left:50%;top:50%;aspect-ratio:1;border-radius:50%;pointer-events:none;filter:blur(7px);
+  background:radial-gradient(circle at 32% 38%,rgba(232,228,246,.42),transparent 42%),radial-gradient(circle at 68% 46%,rgba(222,218,238,.38),transparent 44%),
+             radial-gradient(circle at 46% 72%,rgba(212,208,232,.32),transparent 42%),radial-gradient(circle at 50% 50%,rgba(220,215,240,.10),transparent 60%)}
 /* The role card: face-down (mini card back) until flipped; a dashed spot during the deal. */
 .seal.cb.mini{position:relative;width:34px;height:48px;border-radius:5px;background:radial-gradient(circle at 50% 42%,#4a1f17,#1c0b08 78%)}
 .seal.cb.mini.open{background:linear-gradient(#2c1e14,#120d0a)}
@@ -690,8 +694,11 @@ function introFaces(al, s){
   const out = []; for(const u of al){ let a; do a = rnd(HUMAN_ART); while(a === out[out.length - 1]); out.push(a); }
   return out;
 }
-// Night: each face 1 s, the wolf 1 s, then the howl held 1.5 s. Dawn: the howl 1 s, the wolf 1 s, faces back, last one held.
-const introMs = (faces, dawn) => dawn ? 2000 + faces.length * 1000 + 600 : (faces.length + 1) * 1000 + 1500;
+// The pile-up timeline (tuned with the owner): faces land 1 s apart; the wolf sharpens out of the pile,
+// holds, then howls; then smoke. Dawn plays the same timeline backwards and ends in the same smoke.
+const INTRO = { step:1000, newOp:.4, blurPer:2.5, maxBlur:12, wolfIn:1200, wolfHold:500, howlIn:400, howlHold:1200, puff:1800 };
+const introSeqMs = n => n * INTRO.step + INTRO.wolfIn + INTRO.wolfHold + INTRO.howlIn + INTRO.howlHold;
+const introMs = faces => introSeqMs(faces.length) + INTRO.puff;
 async function startNight(n){
   const s = settingsOf(game), d = dur(s), t = now();
   const al = aliveUids(); const wolves = al.filter(u => secrets[u]?.role === 'werewolf').length;
@@ -1642,25 +1649,60 @@ function renderIntro(){
     if(introKey){ introKey = null; el.classList.add('hidden'); el.innerHTML = ''; } return;
   }
   const key = `g${game.gameNo}-${ph.name}${ph.n}-${ph.introAt}`; if(introKey === key) return; introKey = key;
-  const dawn = ph.name === 'dawn', face = a => ({ src: ART[a]?.portrait || ART.villager1.portrait });
-  const wolf = { src: ART.wolf.portrait }, howl = { src: ART.wolf.howlPortrait || ART.wolf.portrait, howl: true };
-  const seq = dawn ? [howl, wolf, ...(ph.intro.faces || []).map(face)] : [...(ph.intro.faces || []).map(face), wolf, howl];
-  el.innerHTML = `<div class="intro-title">${dawn ? 'Dawn' : 'Night ' + ph.n}</div><div class="intro-med">${seq.map(f => `<div class="intro-face${f.howl ? ' howl' : ''}"><img src="${f.src}" alt=""></div>`).join('')}</div>`;
+  const dawn = ph.name === 'dawn', faces = ph.intro.faces || [], k = faces.length, I = INTRO;
+  const portrait = a => ART[a]?.portrait || ART.villager1.portrait;
+  el.innerHTML = `<div class="intro-title">${dawn ? 'Dawn' : 'Night ' + ph.n}</div><div class="intro-wrap"><div class="intro-med">` +
+    faces.map(a => `<img class="intro-face" src="${portrait(a)}" alt="">`).join('') +
+    `<img class="intro-face" src="${ART.wolf.portrait}" alt=""><img class="intro-face" src="${ART.wolf.howlPortrait || ART.wolf.portrait}" alt=""></div></div>`;
   el.classList.remove('hidden');
-  const total = ph.intro.ms, elapsed = now() - ph.introAt, o = x => Math.min(1, Math.max(0, x / total));
-  const run = (node, kf) => { const a = node.animate(kf, { duration: total, fill:'forwards' }); a.currentTime = elapsed; };
-  run(el, [{ opacity:0 }, { opacity:1, offset:o(400) }, { opacity:1, offset:o(total - 500) }, { opacity:0 }]);
-  el.querySelectorAll('.intro-face').forEach((f, i) => {
-    const start = i * 1000, last = i === seq.length - 1;
-    run(f, last ? [{ opacity:0, offset:0 }, { opacity:0, offset:o(start) }, { opacity:1, offset:o(start + 400) }, { opacity:1, offset:1 }]
-      : [{ opacity:0, offset:0 }, { opacity:0, offset:o(start) }, { opacity:1, offset:o(start + 400) }, { opacity:1, offset:o(start + 1000) }, { opacity:0, offset:o(start + 1400) }, { opacity:0, offset:1 }]);
-    // The howl lands with a little lunge towards the viewer.
-    if(seq[i].howl && !dawn) run(f.querySelector('img'), [{ transform:'scale(1)', offset:0 }, { transform:'scale(1)', offset:o(start + 200) }, { transform:'scale(1.12)', offset:o(start + 450) }, { transform:'scale(1.04)', offset:o(start + 900) }, { transform:'scale(1.04)', offset:1 }]);
+  const elapsed = now() - ph.introAt, seqMs = introSeqMs(k), total = ph.intro.ms;
+  const W = k * I.step, H = W + I.wolfIn + I.wolfHold, inT = Math.min(I.step * .6, 400);
+  const o = x => Math.min(1, Math.max(0, x / seqMs));
+  // Every layer runs on one timeline, written as nightfall; dawn runs the same timeline backwards.
+  const run = (node, kf) => { const a = node.animate(kf, { duration: seqMs, fill:'both', direction: dawn ? 'reverse' : 'normal' }); a.currentTime = Math.min(elapsed, seqMs); };
+  el.animate([{ opacity:0 }, { opacity:1, offset:400 / total }, { opacity:1, offset:1 - 700 / total }, { opacity:0 }], { duration: total, fill:'forwards' }).currentTime = elapsed;
+  const imgs = el.querySelectorAll('.intro-face');
+  // Faces pile up on top of each other: each lands sharp but see-through, and everything under it blurs further.
+  faces.forEach((_, i) => {
+    const s = i * I.step, kf = [{ opacity:0, filter:'blur(0px)', offset:0 }, { opacity:0, filter:'blur(0px)', offset:o(s) }, { opacity:I.newOp, filter:'blur(0px)', offset:o(s + inT) }];
+    for(let j = i + 1; j < k; j++) kf.push({ opacity:I.newOp, filter:`blur(${Math.min(I.maxBlur, I.blurPer * (j - i))}px)`, offset:o(j * I.step + inT) });
+    const last = kf[kf.length - 1];
+    kf.push({ opacity:last.opacity, filter:last.filter, offset:o(W) }, { opacity:0, filter:`blur(${I.maxBlur}px)`, offset:o(W + I.wolfIn) }, { opacity:0, offset:1 });
+    run(imgs[i], kf);
   });
+  // The wolf sharpens out of the blurred pile, then throws its head back to howl (with a little lunge).
+  run(imgs[k], [{ opacity:0, filter:`blur(${I.maxBlur}px)`, offset:0 }, { opacity:0, filter:`blur(${I.maxBlur}px)`, offset:o(W) },
+    { opacity:1, filter:'blur(0px)', offset:o(W + I.wolfIn) }, { opacity:1, offset:o(H) }, { opacity:0, offset:o(H + I.howlIn) }, { opacity:0, offset:1 }]);
+  run(imgs[k + 1], [{ opacity:0, transform:'scale(1)', offset:0 }, { opacity:0, transform:'scale(1)', offset:o(H) }, { opacity:1, transform:'scale(1)', offset:o(H + I.howlIn) },
+    { opacity:1, transform:'scale(1.12)', offset:o(H + I.howlIn + 250) }, { opacity:1, transform:'scale(1.04)', offset:o(H + I.howlIn + 700) }, { opacity:1, transform:'scale(1.04)', offset:1 }]);
+  run(el.querySelector('.intro-med'), [{ borderColor:'#e0a24a', offset:0 }, { borderColor:'#e0a24a', offset:o(H) }, { borderColor:'#b3352a', offset:o(H + I.howlIn) }, { borderColor:'#b3352a', offset:1 }]);
+  // Both directions end the same way: the portrait vanishes in a puff of smoke.
+  if(elapsed < seqMs) setTimeout(() => { if(introKey === key) introSmoke(el); }, seqMs - elapsed);
   setTimeout(render, total - elapsed + 60);           // then the night screen (or the dawn reveal) takes over
 }
-// When the howl appears in the nightfall sequence (ms after introAt).
-const introHowlAt = ph => ph?.intro ? ((ph.intro.faces || []).length + 1) * 1000 : 2000;
+function introSmoke(el){
+  const wrap = el.querySelector('.intro-wrap'), med = el.querySelector('.intro-med'), title = el.querySelector('.intro-title'); if(!wrap) return;
+  const R = wrap.offsetWidth / 2, rand = (a, b) => a + Math.random() * (b - a);
+  const wisp = (size, x, y, x2, y2, grow, ms, delay, peak) => {
+    const p = document.createElement('div'); p.className = 'intro-puff'; p.style.width = size + 'px'; wrap.appendChild(p);
+    const rot = rand(0, 360), spin = rot + rand(-45, 45);
+    p.animate([{ transform:`translate(-50%,-50%) translate(${x}px,${y}px) rotate(${rot}deg) scale(.35)`, opacity:0 }, { opacity:peak, offset:.25 },
+      { transform:`translate(-50%,-50%) translate(${x2}px,${y2}px) rotate(${spin}deg) scale(${grow})`, opacity:0 }], { duration: ms, delay, easing:'cubic-bezier(.2,.6,.3,1)', fill:'both' });
+  };
+  wisp(R * 1.1, 0, 0, 0, -R * .35, rand(1.8, 2.3), 1000, 0, .85);                 // one cloud in the middle
+  for(let i = 0; i < 6; i++){                                                     // a ring bursting from the edge...
+    const a = (i / 6) * Math.PI * 2 + rand(-.25, .25), r0 = R * rand(.55, .85), r1 = R * rand(1.05, 1.35);
+    const x = Math.cos(a) * r0, y = Math.sin(a) * r0, x1 = Math.cos(a) * r1, y1 = Math.sin(a) * r1 - R * .12;
+    wisp(R * rand(.8, 1.1), x, y, x1, y1, rand(1.6, 2.2), 800, 0, .9);
+    for(let j = 0; j < 2; j++){                                                   // ...each splitting into two smaller clouds
+      const b = a + rand(-.7, .7), r2 = R * rand(1.4, 2.0);
+      wisp(R * rand(.35, .5), x1, y1, Math.cos(b) * r2, Math.sin(b) * r2 - R * rand(.3, .6), rand(1.4, 2.0), rand(1000, 1400), 450 + rand(0, 160), .75);
+    }
+  }
+  for(const n of [med, title]) n.animate([{ opacity:1, filter:'blur(0px)', transform:'scale(1)' }, { opacity:0, filter:'blur(10px)', transform:'scale(1.08)' }], { duration:500, delay:120, easing:'ease-in', fill:'forwards' });
+}
+// When the howl lands in the nightfall sequence (ms after introAt).
+const introHowlAt = ph => ph?.intro ? (ph.intro.faces || []).length * INTRO.step + INTRO.wolfIn + INTRO.wolfHold + INTRO.howlIn : 2000;
 
 // ---- The deal: a fanned hand of face-down cards, one per player ----
 // Every screen shows the deck. Each draw removes a card and sends the player's name up one of three
