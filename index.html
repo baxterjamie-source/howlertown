@@ -292,6 +292,7 @@ const SOUNDS = {
   cardHowl:    { cat:'event',   label:'Howl (card drawn)', files:['howl-card.mp3'] },
   cackle:      { cat:'event',   label:'Witch’s cackle', files:['witch-cackle.mp3'], vol:.8 },
   snarl:       { cat:'event',   label:'Wolf snarl',       files:['wolf-snarl.mp3'], vol:.8 },
+  wolfAttack:  { cat:'event',   label:'Wolves attack',    files:['wolf-attacks.mp3'] },
   deathReveal: { cat:'event',   label:'Door creak / scream', files:['death-reveal.mp3'] },
   gavel:       { cat:'event',   label:'Gavel / gasp',     files:['gavel.mp3'] },
   trapdoor:    { cat:'event',   label:'Trapdoor drop',    files:['trapdoor.mp3'] },
@@ -359,6 +360,15 @@ function soundWatch(){
   if(ph.name === 'verdict'){ playSound('gavel');
     if(ph.eliminated){ later(1500, () => playSound('trapdoor'));
       if(game.foolWon === ph.eliminated) later(3500, () => playSound('foolWin')); } }
+}
+// The wolves' attack plays at the moment the host chose (phase.attackAt), on the sound device only.
+let attackKey = null, attackTimer = null;
+function attackWatch(){
+  const ph = game?.phase, at = ph?.attackAt;
+  if(!(game?.status === 'playing' && ph?.name === 'night' && at)){ clearTimeout(attackTimer); attackKey = null; return; }
+  const key = `${game.gameNo}-${ph.n}-${at}`; if(attackKey === key) return; attackKey = key;
+  clearTimeout(attackTimer);
+  if(now() < at + 1500) attackTimer = setTimeout(() => playSound('wolfAttack'), Math.max(0, at - now()));
 }
 // Random night ambience, checked once a second: wind, distant howls, snarls, and the Witch while she lives.
 setInterval(() => {
@@ -715,6 +725,9 @@ async function lockWolves(n, target, failed){
   await DB.set(`${gp()}/private/night`, { n, wolfTarget: target, wolfFailed: failed });
   const witch = aliveUids().find(u => secrets[u]?.role === 'witch');
   if(witch) await DB.update(sp(witch), { night: { n, wolfTarget: target, wolfFailed: failed } });
+  // The attack sound: 3–5 s after the pack agrees (never during the nightfall animation).
+  // Only the moment is shared, never the victim.
+  if(!failed && target) await upd({ 'phase.attackAt': Math.max(now(), game.phase?.startedAt || 0) + 3000 + Math.random() * 2000 });
 }
 async function stepNight(ph, t){
   const n = ph.n, al = aliveUids(), d = dur(settingsOf(game));
@@ -1066,7 +1079,7 @@ function playerList(list, opts = {}){
 const initials = u => { const p = nameOf(u).trim().split(/\s+/); return (p.length > 1 ? p[0][0] + p[p.length - 1][0] : p[0].slice(0, 2)).toUpperCase(); };
 function render(){
   if(!game) return;
-  soundWatch(); renderSoundUI(); renderIntro();
+  soundWatch(); attackWatch(); renderSoundUI(); renderIntro();
   $('home').classList.add('hidden');
   if(crier) return renderCrier();
   if(game.status === 'lobby'){ $('lobby').classList.remove('hidden'); $('game').classList.add('hidden'); setScene('night'); renderLobby();
