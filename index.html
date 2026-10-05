@@ -1072,14 +1072,18 @@ function showHome(){
     list = list.filter(fresh).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     $('open-games').innerHTML = list.slice(0, 15).map(g => {
       const n = playerCount(g), capped = g.settings?.seats && g.settings.seats !== 'any', full = n >= seatCap(g);
-      return `<button class="pl" data-act="join" data-code="${esc(g.id)}" ${full ? 'disabled' : ''}><span>${esc(g.hostName)}\u2019s game<br><span class="sub">${capped ? `${n} of ${seatCap(g)} players` : `${n} player${n === 1 ? '' : 's'}`}, code ${esc(g.id)}</span></span><span class="sub">${full ? 'Full' : 'Join'}</span></button>`;
+      const info = `<span>${esc(g.hostName)}\u2019s game<br><span class="sub">${capped ? `${n} of ${seatCap(g)} players` : `${n} player${n === 1 ? '' : 's'}`}, code ${esc(g.id)}</span></span>`;
+      // Your own games get Join and Delete side by side; everyone else's row is one big Join button.
+      if(isCreator(g)) return `<div class="pl">${info}<span class="marks"><button class="btn small" data-act="join" data-code="${esc(g.id)}">Join</button><button class="btn small blood" data-act="delgame" data-code="${esc(g.id)}">Delete</button></span></div>`;
+      return `<button class="pl" data-act="join" data-code="${esc(g.id)}" ${full ? 'disabled' : ''}>${info}<span class="sub">${full ? 'Full' : 'Join'}</span></button>`;
     }).join('') || '<p class="note">No open games right now. Create one.</p>';
   });
   // Games this device created (any state, so a stuck game can be cleared away).
   if(!unsubMine) unsubMine = DB.myGames(myUid, list => {
-    list = list.filter(g => fresh(g) && isCreator(g)).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    // Waiting games already show (with Delete) in the open games list above, so only list the rest here.
+    list = list.filter(g => fresh(g) && isCreator(g) && g.status !== 'lobby').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     const state = g => g.status === 'lobby' ? 'in the lobby' : g.status === 'playing' ? 'being played' : 'finished';
-    $('my-games').innerHTML = list.length ? `<h2>Your games</h2><div class="list">${list.map(g =>
+    $('my-games').innerHTML = list.length ? `<h2>Your games in play or finished</h2><div class="list">${list.map(g =>
       `<div class="pl"><span>Code ${esc(g.id)}<br><span class="sub">${playerCount(g)} player${playerCount(g) === 1 ? '' : 's'}, ${state(g)}, started ${ago(g.createdAt)}</span></span>` +
       `<span class="marks"><button class="btn small" data-act="join" data-code="${esc(g.id)}">Rejoin</button><button class="btn small blood" data-act="delgame" data-code="${esc(g.id)}">Delete</button></span></div>`).join('')}</div>` : '';
   });
