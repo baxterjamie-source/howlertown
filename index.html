@@ -26,9 +26,18 @@ html,body{overflow-x:hidden}   /* rising names and smoke must never widen the pa
 @keyframes fx-flick{0%{opacity:.85;transform:scale(1)}11%{opacity:.68;transform:scale(.93)}23%{opacity:.96;transform:scale(1.05)}37%{opacity:.74;transform:scale(.96)}52%{opacity:1;transform:scale(1.08)}66%{opacity:.78;transform:scale(.95)}81%{opacity:.93;transform:scale(1.03)}100%{opacity:.85;transform:scale(1)}}
 .fx-star{animation:fx-twinkle 4s ease-in-out infinite}
 @keyframes fx-twinkle{0%,100%{opacity:.1}50%{opacity:.95}}
-.fx-wing{transform-box:fill-box;transform-origin:center;animation:fx-flap .16s ease-in-out infinite alternate}
-@keyframes fx-flap{from{transform:scaleY(1)}to{transform:scaleY(.25)}}
-@media (prefers-reduced-motion: reduce){.fx-glow,.fx-pool,.fx-star,.fx-wing{animation:none}}
+/* A bat: a body and two wings hinged at the shoulders, beating together (the right wing is the left one mirrored). */
+.fx-wing{transform-box:view-box;transform-origin:0 0;animation:fx-flap .14s ease-in-out infinite alternate}
+@keyframes fx-flap{from{transform:rotate(38deg)}to{transform:rotate(-28deg)}}
+.fx-flagwave{transform-box:view-box;transform-origin:769px 167px;animation:fx-flagwave 2.6s ease-in-out infinite alternate}
+#fx-flag.gust .fx-flagwave{animation:fx-flagwave-gust .32s ease-in-out infinite alternate}
+@keyframes fx-flagwave{from{transform:skewY(-3deg) scaleX(.98)}to{transform:skewY(3deg) scaleX(1)}}
+@keyframes fx-flagwave-gust{from{transform:skewY(-8deg) scaleX(.92)}to{transform:skewY(7deg) scaleX(1.03)}}
+.fx-fogbank{animation:fx-fogdrift 40s ease-in-out infinite alternate}
+@keyframes fx-fogdrift{from{transform:translateX(-70px);opacity:.6}50%{opacity:1}to{transform:translateX(70px);opacity:.7}}
+.fx-fogroad{transform-box:fill-box;transform-origin:center;animation:fx-fogcreep 18s linear infinite}
+@keyframes fx-fogcreep{0%{transform:translate(0,0) scale(.6);opacity:0}20%{opacity:1}100%{transform:translate(0,120px) scale(2.6);opacity:0}}
+@media (prefers-reduced-motion: reduce){.fx-glow,.fx-pool,.fx-star,.fx-wing,.fx-fogbank,.fx-fogroad{animation:none}}
 .wordmark{position:absolute;left:18px;top:12px;font-family:var(--serif);font-size:26px;color:var(--parch);text-shadow:0 2px 10px #000;z-index:2}
 .wrap{padding:6px 20px 72px}   /* room at the bottom for the floating Sound button */
 .top{display:flex;justify-content:space-between;align-items:baseline;color:var(--dim);font-size:15px;gap:10px}
@@ -396,7 +405,7 @@ setInterval(() => {
   if(now() - ph.startedAt < 4000 || now() - lastNightSound < 6000) return;   // let the loud howl have the opening; no pile-ups
   const r = Math.random(), pick = r < 1 / 22 ? 'wind' : r < 1 / 22 + 1 / 35 ? 'howlFar' : r < 1 / 22 + 1 / 35 + 1 / 45 ? 'snarl'
     : ph.witchAlive && r < 1 / 22 + 1 / 35 + 1 / 45 + 1 / 60 ? 'cackle' : null;
-  if(pick){ lastNightSound = now(); playSound(pick); }
+  if(pick){ lastNightSound = now(); playSound(pick); if(pick === 'wind') fxGust(); }          // the gust you hear, you also see
 }, 1000);
 let lastNightSound = 0;
 // The sound panel: on the sound device only (the Crier, or the host when there's no Crier).
@@ -1128,6 +1137,7 @@ function setScene(which){
   const o = { night:[1,0,0], dawn:[0,1,0], day:[0,0,1] }[which];
   ['imN','imA','imD'].forEach((id, i) => $(id).setAttribute('opacity', o[i]));
   const fx = $('fx'); if(fx) fx.style.opacity = which === 'night' ? 1 : 0;      // night effects fade with the painting
+  const sun = $('fx-sun'); if(sun) sun.style.opacity = which === 'day' ? 1 : 0;
 }
 
 // ---- Night effects (positions are in the painting's 1280×720 units) ----
@@ -1136,7 +1146,56 @@ const FX = {
   stars: [[846,8],[527,40],[234,15],[194,44],[1151,57],[518,71],[586,42],[440,106],[835,93],[649,151],[1185,18],[861,28],[254,57],[511,60],
           [655,187],[745,68],[756,27],[876,128],[441,59],[1115,76],[403,61],[1127,49],[517,56],[478,37],[1198,12],[904,134],[487,122],[826,119],[457,105],[500,60],[606,24]],
   moon: { x:700, y:200, r:20 },            // over the forest road, low enough to show in the phone banner, clear of the title
+  // Chimney tops (the same on the night, dawn and day paintings): smoke rises from these all day and night.
+  chimneys: [[47,153],[203,273],[347,220],[497,343],[887,267],[1113,220]],
+  sun: { x:600, y:192 },                   // over the forest road, left of the tower; rises as dawn turns to day
 };
+// The sun climbs over the forest road as each day begins, and stays up until night.
+let sunKey = null;
+function fxSun(){
+  const el = $('fx-sun-in'); if(!el) return;
+  const ph = game?.phase, day = game?.status === 'playing' && ph?.name === 'day';
+  const key = day ? `${game.gameNo}-${ph.n}` : null; if(key === sunKey) return; sunKey = key;
+  el.getAnimations().forEach(a => a.cancel());
+  if(!day) return;
+  const a = el.animate([{ transform:'translateY(60px)', opacity:0 }, { opacity:1, offset:.4 }, { transform:'translateY(0)', opacity:1 }], { duration:8000, easing:'cubic-bezier(.3,.1,.3,1)', fill:'both' });
+  a.currentTime = now() - (ph.startedAt || now());
+}
+// Smoke: soft puffs rise, swell and drift with the breeze; a little stronger with each gust of wind.
+let fxWind = 0;
+function fxSmoke(){
+  const layer = $('fx-smoke'); if(!layer) return;
+  if(document.visibilityState === 'visible') for(const [x, y] of FX.chimneys){
+    if(Math.random() < .45) continue;                                         // each chimney puffs unevenly
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    p.setAttribute('r', 7 + Math.random() * 4); p.setAttribute('fill', 'url(#fx-smokeg)'); layer.appendChild(p);
+    const rise = 70 + Math.random() * 40, drift = 25 + Math.random() * 25 + fxWind * 60, dur = 5000 + Math.random() * 2500;
+    p.animate([{ transform:`translate(${x}px,${y}px) scale(.5)`, opacity:0 }, { opacity:.8, offset:.12 },
+      { transform:`translate(${x + drift * .45}px,${y - rise * .55}px) scale(1.4)`, opacity:.55, offset:.5 },
+      { transform:`translate(${x + drift}px,${y - rise}px) scale(2.4)`, opacity:0 }], { duration: dur, easing:'ease-out', fill:'both' }).finished.then(() => p.remove());
+  }
+  setTimeout(fxSmoke, 700 + Math.random() * 500);
+}
+// Wind: the tower flag (a copy of the painted flag, clipped and waved from its pole) always stirs a little;
+// a gust makes it flap hard, sends leaves tumbling across the square and bends the chimney smoke.
+const FLAG = { x:768, y:157, w:36, h:24 };                   // the cloth only, just right of the pole at x 766
+function fxGust(){
+  fxWind = 1; setTimeout(() => { fxWind = 0; }, 5000);
+  const f = $('fx-flag'); if(f){ f.classList.add('gust'); setTimeout(() => f.classList.remove('gust'), 5000); }
+  const layer = $('fx-leaves'); if(!layer || document.visibilityState !== 'visible') return;
+  const ltr = Math.random() < .6, n = 4 + Math.floor(Math.random() * 5), cols = ['#7a5a2a', '#8f6a2c', '#5f6b2a', '#a2742e'];
+  for(let i = 0; i < n; i++){
+    const l = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    l.setAttribute('d', 'M0-3C3-3 5 0 0 4C-5 0-3-3 0-3Z'); l.setAttribute('fill', cols[i % cols.length]); layer.appendChild(l);
+    const y = 440 + Math.random() * 200, x0 = ltr ? -20 : 1300, x1 = ltr ? 1300 : -20, bob = 15 + Math.random() * 25, spin = (Math.random() < .5 ? 1 : -1) * (360 + Math.random() * 720);
+    l.animate([0, .2, .4, .6, .8, 1].map((t, j) => ({ transform:`translate(${x0 + (x1 - x0) * t}px,${y + (j % 2 ? -bob : bob) * Math.sin(t * Math.PI)}px) rotate(${spin * t}deg) scale(${2.4 + (j % 2) * .6},2.2)` })),
+      { duration: 3200 + Math.random() * 1800, delay: Math.random() * 1200, easing:'linear', fill:'both' }).finished.then(() => l.remove());
+  }
+}
+// Silent gusts now and then on every screen, day or night (the sound device also gusts with each wind sound).
+setTimeout(function gusts(){ if(document.visibilityState === 'visible' && !introRunning(game?.phase)) fxGust(); setTimeout(gusts, 25000 + Math.random() * 35000); }, 30000);
+// Fog at night: soft banks drift slowly across the edge of the forest, and wisps creep down the forest road.
+const FOG_BANKS = [[200, 345, 260], [620, 360, 220], [1050, 340, 260], [430, 395, 200], [840, 400, 200]];
 function fxInit(){
   const svg = document.querySelector('.banner svg'); if(!svg || $('fx')) return;
   const r = (a, b) => (a + Math.random() * (b - a)).toFixed(2), m = FX.moon;
@@ -1147,8 +1206,19 @@ function fxInit(){
       <radialGradient id="fx-halo"><stop offset="0" stop-color="#fff6d8" stop-opacity=".35"/><stop offset=".45" stop-color="#cfd8ff" stop-opacity=".12"/><stop offset="1" stop-color="#cfd8ff" stop-opacity="0"/></radialGradient>
       <linearGradient id="fx-meteor" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".95"/></linearGradient>
       <filter id="fx-soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.2"/></filter>
+      <radialGradient id="fx-smokeg"><stop offset="0" stop-color="#d6d8de" stop-opacity=".58"/><stop offset=".6" stop-color="#c9ccd4" stop-opacity=".26"/><stop offset="1" stop-color="#c9ccd4" stop-opacity="0"/></radialGradient>
+      <radialGradient id="fx-fogg"><stop offset="0" stop-color="#cfd8e6" stop-opacity=".22"/><stop offset=".55" stop-color="#cfd8e6" stop-opacity=".1"/><stop offset="1" stop-color="#cfd8e6" stop-opacity="0"/></radialGradient>
       <radialGradient id="fx-moonface" cx=".42" cy=".38" r=".7"><stop offset="0" stop-color="#fffaf0"/><stop offset=".7" stop-color="#f1e8cc"/><stop offset="1" stop-color="#d9cfae"/></radialGradient>
-    </defs><g id="fx">
+      <radialGradient id="fx-sunface"><stop offset="0" stop-color="#fffbe8"/><stop offset=".7" stop-color="#fff1b8"/><stop offset="1" stop-color="#ffe08a"/></radialGradient>
+      <radialGradient id="fx-sunhalo"><stop offset="0" stop-color="#fff3c4" stop-opacity=".6"/><stop offset=".25" stop-color="#ffe7a0" stop-opacity=".25"/><stop offset="1" stop-color="#ffe7a0" stop-opacity="0"/></radialGradient>
+      <clipPath id="fx-flagclip"><rect x="${FLAG.x}" y="${FLAG.y}" width="${FLAG.w}" height="${FLAG.h}"/></clipPath>
+    </defs><g id="fx-smoke"></g>
+    <g id="fx-flag"><g class="fx-flagwave" clip-path="url(#fx-flagclip)"><use href="#imN"/><use href="#imA"/><use href="#imD"/></g></g>
+    <g id="fx-sun" style="opacity:0;transition:opacity 3s ease"><g transform="translate(${FX.sun.x} ${FX.sun.y})"><g id="fx-sun-in">
+      <circle r="90" fill="url(#fx-sunhalo)"/><circle r="17" fill="url(#fx-sunface)"/></g></g></g>
+    <g id="fx-leaves"></g><g id="fx">
+      <g id="fx-fog">${FOG_BANKS.map(([x, y, w], i) => `<ellipse class="fx-fogbank" cx="${x}" cy="${y}" rx="${w}" ry="${w * .16}" fill="url(#fx-fogg)" style="animation-duration:${(38 + i * 7)}s;animation-delay:-${r(0, 30)}s"/>`).join('')}
+        ${[0, 1, 2].map(i => `<ellipse class="fx-fogroad" cx="660" cy="300" rx="70" ry="14" fill="url(#fx-fogg)" style="animation-delay:-${i * 6}s"/>`).join('')}</g>
       ${FX.stars.map(([x, y]) => `<circle class="fx-star" cx="${x}" cy="${y}" r="${r(1.6, 2.6)}" fill="url(#fx-star)" style="animation-duration:${r(2.5, 6)}s;animation-delay:-${r(0, 6)}s"/>`).join('')}
       <g id="fx-moon" transform="translate(${m.x} ${m.y})"><g id="fx-moon-in"><circle r="${m.r * 4}" fill="url(#fx-halo)"/><circle r="${m.r}" fill="url(#fx-moonface)"/>
         <g fill="#b5ab90" opacity=".22" filter="url(#fx-soft)"><ellipse cx="${-m.r * .3}" cy="${-m.r * .25}" rx="${m.r * .32}" ry="${m.r * .22}"/><ellipse cx="${m.r * .28}" cy="${-m.r * .05}" rx="${m.r * .22}" ry="${m.r * .28}"/><ellipse cx="${-m.r * .05}" cy="${m.r * .35}" rx="${m.r * .26}" ry="${m.r * .16}"/><circle cx="${m.r * .45}" cy="${m.r * .42}" r="${m.r * .1}"/></g></g></g>
@@ -1156,7 +1226,7 @@ function fxInit(){
         `<circle class="fx-glow" cx="${t.x}" cy="${t.y}" r="${t.big ? 30 : 15}" fill="url(#fx-glow)" style="animation-duration:${r(1.1, 1.6)}s;animation-delay:-${r(0, 2)}s"/>`).join('')}
       <g id="fx-dyn"></g>
     </g>`);
-  fxSchedule();
+  fxSchedule(); fxSmoke();
 }
 // The moon rises over the forest road as each night begins (once the nightfall animation has finished).
 let moonKey = null;
@@ -1176,18 +1246,41 @@ function fxSchedule(){
 }
 setTimeout(function meteors(){ if(fxNight()) fxMeteor(); setTimeout(meteors, 30000 + Math.random() * 40000); }, 20000);
 const fxNight = () => $('fx')?.style.opacity === '1' && document.visibilityState === 'visible' && !introRunning(game?.phase);
+// Bats dart about: each one zigzags across the sky on its own erratic route (up, down, the odd
+// swerve back), speeding up and slowing, and every route passes across the face of the moon.
 function fxBats(){
   const dyn = $('fx-dyn'); if(!dyn) return;
-  const ltr = Math.random() < .5, n = 1 + Math.floor(Math.random() * 3), y0 = crier ? 60 + Math.random() * 160 : 182 + Math.random() * 40;
-  const size = crier ? 1 : 1.6, dur = 7000 + Math.random() * 4000;
+  const rand = (a, b) => a + Math.random() * (b - a), m = FX.moon;
+  // The sky band each view can see: the phone banner crops the top of the sky.
+  // Bats may dip in front of the treetops too, so the band reaches below the skyline.
+  const band = crier ? { y0:30, y1:330 } : { y0:174, y1:300 }, size = crier ? .6 : .95;
+  const n = 1 + Math.floor(Math.random() * 4);
   for(let i = 0; i < n; i++){
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    // Three layers: the flight path (animated below), the bat's size, and the wing-flap.
-    g.innerHTML = `<g transform="scale(${size})"><path class="fx-wing" d="M0 0C-3-4-7-5-12-2C-9-1-8 1-9 3C-6 1-3 2 0 4C3 2 6 1 9 3C8 1 9-1 12-2C7-5 3-4 0 0Z" fill="#090b12" style="animation-duration:${(.12 + Math.random() * .08).toFixed(2)}s"/></g>`;
+    // Layers: the flight path (animated below), the bat's size, then body + two wings hinged at the shoulders.
+    const beat = `animation-duration:${rand(.1, .16).toFixed(2)}s`, wing = 'M0 -.5C-4-4-9-5-13-3C-11-2-10 0-10 1.5C-8.5 .5-7.5 1-6.5 2.2C-5.5 1.2-4 1-2.5 2C-1.5 1-.8 .6 0 1Z';
+    g.innerHTML = `<g transform="scale(${(size * rand(.8, 1.15)).toFixed(2)})" fill="#090b12">` +
+      `<path class="fx-wing" d="${wing}" style="${beat}"/><g transform="scale(-1 1)"><path class="fx-wing" d="${wing}" style="${beat}"/></g>` +
+      `<ellipse cx="0" cy=".8" rx="1.9" ry="3.2"/><circle cx="0" cy="-2.6" r="1.6"/><path d="M-1.4-3.4L-1.1-5.6L-.3-3.9ZM1.4-3.4L1.1-5.6L.3-3.9Z"/></g>`;
     dyn.appendChild(g);
-    const x0 = ltr ? -40 - i * 50 : 1320 + i * 50, x1 = ltr ? 1340 : -60, y = y0 + (Math.random() - .5) * 30, wob = 10 + Math.random() * 14;
-    const kf = [0, .25, .5, .75, 1].map((f, j) => ({ transform:`translate(${x0 + (x1 - x0) * f}px, ${y + (j % 2 ? -wob : wob) * (j && j < 4 ? 1 : 0)}px)` }));
-    g.animate(kf, { duration: dur + i * 400, delay: i * 250, easing:'linear', fill:'both' }).finished.then(() => g.remove());
+    // A turn roughly every third of a second: short sharp jumps up or down, bouncing off the band's edges.
+    const ltr = Math.random() < .5, xs = ltr ? -40 : 1320, xe = ltr ? 1320 : -40, steps = 24 + Math.floor(Math.random() * 9);
+    const pts = []; let y = rand(band.y0, band.y1);
+    for(let j = 0; j <= steps; j++){
+      const f = j / steps;
+      let x = xs + (xe - xs) * f + rand(-30, 30);
+      if(j > 1 && j < steps - 1 && Math.random() < .2) x = pts[j - 1].x - (xe - xs) * rand(.02, .05);   // a sharp swerve back
+      y += (j % 2 ? 1 : -1) * rand(18, 55) * (Math.random() < .25 ? -1 : 1);
+      if(y < band.y0) y = band.y0 + (band.y0 - y); if(y > band.y1) y = band.y1 - (y - band.y1);
+      pts.push({ x, y });
+    }
+    // As it passes the moon's side of the sky, it swoops across the moon's face.
+    let k = 1; pts.forEach((p, j) => { if(j && j < steps && Math.abs(p.x - m.x) < Math.abs(pts[k].x - m.x)) k = j; });
+    pts[k] = { x: m.x + rand(-m.r * .6, m.r * .6), y: m.y + rand(-m.r * .5, m.r * .5) };
+    let len = 0; const d = pts.map((p, j) => (len += j ? Math.hypot(p.x - pts[j - 1].x, p.y - pts[j - 1].y) : 0));
+    const speed = rand(150, 230);                                                                 // sky units per second
+    g.animate(pts.map((p, j) => ({ transform:`translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)`, offset: d[j] / len, easing:'ease-in-out' })),
+      { duration: len / speed * 1000, delay: rand(0, 3500), fill:'both' }).finished.then(() => g.remove());
   }
 }
 function fxMeteor(){
@@ -1216,7 +1309,7 @@ function playerList(list, opts = {}){
 const initials = u => { const p = nameOf(u).trim().split(/\s+/); return (p.length > 1 ? p[0][0] + p[p.length - 1][0] : p[0].slice(0, 2)).toUpperCase(); };
 function render(){
   if(!game) return;
-  soundWatch(); attackWatch(); renderSoundUI(); renderIntro(); fxMoon();
+  soundWatch(); attackWatch(); renderSoundUI(); renderIntro(); fxMoon(); fxSun();
   $('home').classList.add('hidden');
   if(crier) return renderCrier();
   if(game.status === 'lobby'){ $('lobby').classList.remove('hidden'); $('game').classList.add('hidden'); setScene('night'); renderLobby();
@@ -2106,7 +2199,7 @@ if(document.fonts) document.fonts.ready.then(fitTagline);
 (async () => {
   fxInit(); setScene('night');
   await initDB();
-  if(MOCK) window.__ht = { DB: () => DB, path: () => gp(), game: () => game, uids, sound: () => ({ device: isSoundDevice(), locked: audioLocked(), loops: Object.keys(loops), buffers }), fxBats, fxMeteor };   // offline test hook
+  if(MOCK) window.__ht = { DB: () => DB, path: () => gp(), game: () => game, uids, sound: () => ({ device: isSoundDevice(), locked: audioLocked(), loops: Object.keys(loops), buffers }), fxBats, fxMeteor, fxGust };   // offline test hook
   $('mocknote').textContent = MOCK ? 'Offline test mode: games live only in this browser. Turn on Test mode in the lobby and add bots. To try the Town Crier, open this page in a second tab and join with the code.' : '';
   // ?crier=CODE opens straight into Town Crier mode (handy as a TV bookmark); ?join=CODE fills in the code.
   const q = new URLSearchParams(location.search);
