@@ -235,6 +235,7 @@ body.crier .risename{font-size:5.5vh}
 <div class="row"><button class="btn pri full" data-act="create">Create a game</button></div>
 <h2>Join an open game or enter a code</h2>
 <div class="list" id="open-games"></div>
+<div id="my-games"></div>
 <div class="row" style="flex-wrap:nowrap"><input id="in-code" maxlength="6" placeholder="Enter code" aria-label="Game code" style="text-transform:uppercase"><button class="btn" data-act="joincode">Join</button></div>
 <div class="row"><button class="btn small" data-act="crier-join">Join as Town Crier</button><span class="note">For a TV or big screen everyone can see. No name needed.</span></div>
 <p class="err" id="home-err"></p>
@@ -430,6 +431,9 @@ async function initDB(){
     // Single-field query, sorted on the device, so no extra Firestore index is needed.
     openGames: cb => fs.onSnapshot(fs.query(col(GAMES), fs.where('status','==','lobby')), s => {
       const a = []; s.forEach(d => a.push({ id: d.id, ...d.data() })); cb(a); }),
+    myGames: (uid, cb) => fs.onSnapshot(fs.query(col(GAMES), fs.where('createdBy','==',uid)), s => {
+      const a = []; s.forEach(d => a.push({ id: d.id, ...d.data() })); cb(a); }),
+    del: p => fs.deleteDoc(ref(p)),
     transact: (p, fn) => fs.runTransaction(db, async tx => {
       const s = await tx.get(ref(p)); const u = fn(s.exists() ? s.data() : null);
       if(u){ tx.update(ref(p), u); return true; } return false; }),
@@ -452,6 +456,7 @@ function mockDB(){
   const bc = (() => { try{ return new BroadcastChannel('htmock'); }catch{ return null; } })();
   const apply = m => {
     if(m.op === 'set') store[m.p] = m.m && store[m.p] ? merge(store[m.p], m.d) : clone(m.d);
+    else if(m.op === 'del') delete store[m.p];
     else if(store[m.p]) for(const k in m.d) setPath(store[m.p], k, m.d[k]);
   };
   const write = m => { apply(m); persist(m.p); bc?.postMessage(m); notify(); };
@@ -462,7 +467,7 @@ function mockDB(){
       for(const k in store) if(k.startsWith(pre) && !k.slice(pre.length).includes('/')) o[k.slice(pre.length)] = clone(store[k]);
       return s.cb(o); }
     const a = []; for(const k in store){ const p = k.split('/');
-      if(p[0] === GAMES && p.length === 2 && store[k].status === 'lobby') a.push({ id: p[1], ...clone(store[k]) }); }
+      if(p[0] === GAMES && p.length === 2 && (s.kind === 'mine' ? store[k].createdBy === s.uid : store[k].status === 'lobby')) a.push({ id: p[1], ...clone(store[k]) }); }
     s.cb(a);
   };
   let pending = false;
@@ -481,6 +486,8 @@ function mockDB(){
     watch: (p, cb) => sub({ kind:'doc', path:p, cb }),
     watchCol: (p, cb) => sub({ kind:'col', path:p, cb }),
     openGames: cb => sub({ kind:'open', cb }),
+    myGames: (uid, cb) => sub({ kind:'mine', uid, cb }),
+    del: async p => write({ op:'del', p }),
     transact: async (p, fn) => { const u = fn(clone(store[p])); if(u){ write({ op:'update', p, d: clone(u) }); return true; } return false; },
   };
 }
@@ -512,7 +519,7 @@ const ROLES = {
   fool:     { name:'Town Fool', text:'You win if the village votes you out. Get yourself hanged.' },
 };
 const DEFAULTS = {
-  wolves:'auto', witch:true, doctor:false, fool:false, witchBoth:true,
+  wolves:'auto', seer:true, witch:true, doctor:false, fool:false, witchBoth:true,
   dayMode:'structured', rounds:2, speak:20, discussion:180, night:60, voteTime:45,
   votes:'public', reveal:true, parity:'smart', parityTimer:'short', foolWin:'continue',
   test:{ on:false, fast:false, allSeeing:false, forceRole:'' },
@@ -531,7 +538,7 @@ function dur(s){
 const autoWolves = n => n <= 6 ? 1 : n <= 10 ? 2 : n <= 14 ? 3 : 4;
 function roleList(n, s){
   const w = s.wolves === 'auto' ? autoWolves(n) : Math.max(1, Math.min(+s.wolves, n - 2));
-  const specials = ['seer']; if(s.witch) specials.push('witch'); if(s.doctor) specials.push('doctor'); if(s.fool) specials.push('fool');
+  const specials = []; if(s.seer) specials.push('seer'); if(s.witch) specials.push('witch'); if(s.doctor) specials.push('doctor'); if(s.fool) specials.push('fool');
   const roles = Array(w).fill('werewolf');
   for(const r of specials) if(roles.length < n) roles.push(r);
   while(roles.length < n) roles.push('villager');
@@ -551,7 +558,7 @@ function lobbyWarnings(n, s){
   const w = [];
   if(n < MIN_PLAYERS) w.push(`At least ${MIN_PLAYERS} players needed (add bots in Test mode to try it alone).`);
   const roles = roleList(Math.max(n, MIN_PLAYERS), s);
-  const specials = 1 + (s.witch ? 1 : 0) + (s.doctor ? 1 : 0) + (s.fool ? 1 : 0);
+  const specials = (s.seer ? 1 : 0) + (s.witch ? 1 : 0) + (s.doctor ? 1 : 0) + (s.fool ? 1 : 0);
   const wolves = roles.filter(r => r === 'werewolf').length;
   if(n >= MIN_PLAYERS && wolves + specials > n) w.push('Not enough players for every role you switched on; some will be left out.');
   if(n >= MIN_PLAYERS && wolves * 2 >= n - 1) w.push('That many wolves for this group means a very quick wolf win.');
@@ -592,7 +599,7 @@ const nameList = (names) => names.length <= 1 ? (names[0] || '') : names.slice(0
 let myUid = ls.get('howlertown_uid'); if(!myUid){ myUid = uuid(); ls.set('howlertown_uid', myUid); }
 let myName = ls.get('howlertown_name') || '';
 let code = null, game = null, actions = {}, secrets = {}, mySecret = null, filler = {}, night = null, history = {};
-let unsubs = [], hostSubs = [], unsubOpen = null;
+let unsubs = [], hostSubs = [], unsubOpen = null, unsubMine = null;
 const gp = () => `${GAMES}/${code}`;
 const ap = u => `${gp()}/actions/${u}`;
 const sp = u => `${gp()}/secrets/${u}`;
@@ -808,7 +815,7 @@ async function stepDay(ph, t){
     if(ph.floor.stage === 'accuser') return upd({ 'phase.floor.stage':'accused', 'phase.floor.endsAt': t + d.speak * 1000 });
     const r = ph.round + 1;
     if(r > s.rounds) return startVote(ph.n, 1, al);
-    return upd({ 'phase.floor': null, 'phase.round': r, 'phase.endsAt': t + d.window * 1000 });
+    return upd({ 'phase.floor': null, 'phase.round': r, 'phase.roundAt': t, 'phase.endsAt': t + d.window * 1000 });
   }
   if(t >= ph.endsAt) return startVote(ph.n, 1, al);
 }
@@ -918,7 +925,8 @@ async function runBots(){
         await DB.update(`${gp()}/live/filler`, { [b]: { n, target: rnd(others(b)) } }).catch(() => {});
       }
     } else if(ph.name === 'day'){
-      if(ph.mode === 'structured' && !ph.floor && t > ph.startedAt + 2500 && Math.random() < .06){
+      // Bots give people at least 8 s to talk before accusing, at the start of the day and of each round.
+      if(ph.mode === 'structured' && !ph.floor && t > (ph.roundAt || ph.startedAt) + 8000 && Math.random() < .06){
         const ok = others(b).filter(u => !(ph.accused || []).includes(u));
         if(ok.length) await claimFloor(b, rnd(ok));
       }
@@ -974,7 +982,7 @@ function readName(){
 async function createGame(){
   const name = readName(); if(!name) return;
   const c = genCode();
-  await DB.set(`${GAMES}/${c}`, { status:'lobby', createdAt: now(), hostUid: myUid, hostName: name, hostBeat: now(),
+  await DB.set(`${GAMES}/${c}`, { status:'lobby', createdAt: now(), createdBy: myUid, hostUid: myUid, hostName: name, hostBeat: now(),
     settings: DEFAULTS, players: { [myUid]: { name, alive:true, bot:false, joinedAt: now() } }, revealed:{} });
   enterGame(c);
 }
@@ -982,7 +990,7 @@ async function joinGame(c){
   const name = readName(); if(!name) return;
   c = (c || '').trim().toUpperCase(); if(!c) return;
   const g = await DB.get(`${GAMES}/${c}`);
-  if(!g){ $('home-err').textContent = 'No game with that code.'; return; }
+  if(!fresh(g)){ $('home-err').textContent = 'No game with that code.'; return; }
   if(!g.players?.[myUid]){
     if(g.status !== 'lobby'){ $('home-err').textContent = 'That game has already started.'; return; }
     if(Object.keys(g.players || {}).length >= MAX_PLAYERS){ $('home-err').textContent = 'That game is full.'; return; }
@@ -992,7 +1000,7 @@ async function joinGame(c){
 }
 function enterGame(c){
   leaveListeners(); code = c; ls.set('howlertown_current_game', c);
-  unsubs.push(DB.watch(gp(), g => { game = g; if(!g){ leaveGame(); return; } ensureHostSubs(); render(); }));
+  unsubs.push(DB.watch(gp(), g => { game = g; if(!g || g.status === 'deleted'){ leaveGame(); return; } ensureHostSubs(); render(); }));
   unsubs.push(DB.watchCol(`${gp()}/actions`, a => { actions = a || {}; render(); }));
   unsubs.push(DB.watch(sp(myUid), s => { mySecret = s; render(); }));
   unsubs.push(DB.watch(`${gp()}/live/filler`, f => { filler = f || {}; render(); }));
@@ -1003,7 +1011,7 @@ async function joinAsCrier(c){
   c = (c || '').trim().toUpperCase();
   if(!c){ $('home-err').textContent = 'Enter the game code first.'; return; }
   const g = await DB.get(`${GAMES}/${c}`);
-  if(!g){ $('home-err').textContent = 'No game with that code.'; return; }
+  if(!fresh(g)){ $('home-err').textContent = 'No game with that code.'; return; }
   enterCrier(c);
 }
 function enterCrier(c){
@@ -1012,7 +1020,7 @@ function enterCrier(c){
   document.body.classList.add('crier');
   document.querySelector('.banner svg').setAttribute('viewBox', BANNER_VB());
   DB.update(gp(), { [`criers.${crierId}`]: { joinedAt: now(), beat: now() } }).catch(() => {});
-  unsubs.push(DB.watch(gp(), g => { game = g; if(!g){ leaveCrier(); return; } render(); }));
+  unsubs.push(DB.watch(gp(), g => { game = g; if(!g || g.status === 'deleted'){ leaveCrier(); return; } render(); }));
 }
 function leaveCrier(){
   if(code && game) DB.update(gp(), { [`criers.${crierId}`]: null }).catch(() => {});
@@ -1036,12 +1044,36 @@ function showHome(){
   $('home').classList.remove('hidden'); $('lobby').classList.add('hidden'); $('game').classList.add('hidden');
   $('in-name').value = myName; setScene('night'); fitTagline();
   if(!unsubOpen) unsubOpen = DB.openGames(list => {
-    list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    list = list.filter(fresh).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     $('open-games').innerHTML = list.slice(0, 15).map(g => {
-      const n = Object.keys(g.players || {}).length;
+      const n = playerCount(g);
       return `<button class="pl" data-act="join" data-code="${esc(g.id)}"><span>${esc(g.hostName)}\u2019s game<br><span class="sub">${n} player${n === 1 ? '' : 's'}, code ${esc(g.id)}</span></span><span class="sub">Join</span></button>`;
     }).join('') || '<p class="note">No open games right now. Create one.</p>';
   });
+  // Games this device created (any state, so a stuck game can be cleared away).
+  if(!unsubMine) unsubMine = DB.myGames(myUid, list => {
+    list = list.filter(fresh).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    const state = g => g.status === 'lobby' ? 'in the lobby' : g.status === 'playing' ? 'being played' : 'finished';
+    $('my-games').innerHTML = list.length ? `<h2>Your games</h2><div class="list">${list.map(g =>
+      `<div class="pl"><span>Code ${esc(g.id)}<br><span class="sub">${playerCount(g)} players, ${state(g)}, started ${ago(g.createdAt)}</span></span>` +
+      `<span class="marks"><button class="btn small" data-act="join" data-code="${esc(g.id)}">Rejoin</button><button class="btn small blood" data-act="delgame" data-code="${esc(g.id)}">Delete</button></span></div>`).join('')}</div>` : '';
+  });
+}
+// Games older than 48 hours are never listed.
+const fresh = g => g && g.status !== 'deleted' && now() - (g.createdAt || 0) < 48 * 3600e3;
+const playerCount = g => Object.values(g.players || {}).filter(Boolean).length;
+const ago = t => { const m = Math.round((now() - t) / 60000); return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
+// Only the player who created a game can delete it. Everyone in it is sent back to the home screen.
+async function deleteGame(c){
+  const g = await DB.get(`${GAMES}/${c}`); if(!g) return;
+  if(g.createdBy !== myUid) return alert('Only the player who created this game can delete it.');
+  if(!confirm(`Delete game ${c} for everyone? This can't be undone.`)) return;
+  const base = `${GAMES}/${c}`, list = Object.keys(g.players || {});
+  const parts = [...list.flatMap(u => [`${base}/actions/${u}`, `${base}/secrets/${u}`]), `${base}/private/night`, `${base}/live/filler`];
+  for(const p of parts) await DB.del(p).catch(() => {});
+  try{ await DB.del(base); }
+  catch(e){ await DB.update(base, { status:'deleted' }).catch(() => {}); }   // if deleting isn't allowed, hide it instead
+  if(code === c) leaveGame();
 }
 
 // ---- 12. PLAYER ACTIONS -----------------------------------------------------------
@@ -1104,10 +1136,16 @@ function renderLobby(){
     ${liveCriers().length ? `<p class="note">Town Crier connected${liveCriers().length > 1 ? ` (${liveCriers().length} screens; the first plays sound)` : ''}.</p>` : ''}
     ${host && list.some(u => players()[u].score) ? '<div class="row"><button class="btn small" data-act="resetscores">Reset scores</button></div>' : ''}
     ${host ? `<div class="row">${list.filter(u => u !== myUid && !players()[u].bot).map(u => `<button class="btn small" data-act="makehost" data-u="${esc(u)}">Make ${esc(nameOf(u))} host</button>`).join('')}</div>` : ''}
+    ${host ? (() => { const bots = list.filter(u => players()[u].bot).length;
+      // Bots fill empty seats in any game (no Test mode needed); they play their roles on the host's phone.
+      return `<div class="row"><span class="note">${list.length - bots} ${list.length - bots === 1 ? 'person' : 'people'}, ${bots} bot${bots === 1 ? '' : 's'}</span>` +
+        `<button class="btn small" data-act="addbot" ${list.length >= MAX_PLAYERS ? 'disabled' : ''}>Add a bot</button><button class="btn small" data-act="removebot" ${bots ? '' : 'disabled'}>Remove a bot</button></div>` +
+        (bots ? '<p class="note">Bots play on this phone, so keep it open during the game.</p>' : ''); })() : ''}
     ${away ? `<div class="row"><button class="btn pri" data-act="takehost">The host seems to be away. Take over as host</button></div>` : ''}
     ${host ? '' : '<p class="note" style="margin-top:14px">The host is choosing the rules. Settings appear here as they change.</p>'}
     <fieldset><legend>Roles</legend>
       ${sel('wolves', [['auto','Auto by group size'],['1','1'],['2','2'],['3','3'],['4','4']], 'Werewolves')}
+      ${sel('seer', onoff, 'Seer')}
       ${sel('witch', onoff, 'Witch')}
       ${s.witch ? sel('witchBoth', [['true','Allowed'],['false','One per night']], 'Witch: both potions in one night') : ''}
       ${sel('doctor', onoff, 'Doctor')}
@@ -1136,12 +1174,11 @@ function renderLobby(){
         ${sel('test.fast', onoff, 'Fast timers', 'test.fast')}
         ${sel('test.allSeeing', onoff, 'All-seeing view', 'test.allSeeing')}
         ${sel('test.forceRole', [['','Random'],...Object.keys(ROLES).map(r => [r, roleName(r)])], 'My role', 'test.forceRole')}
-        <div class="row"><button class="btn small" data-act="addbot">Add a bot</button><button class="btn small" data-act="fillbots">Fill to 7</button><button class="btn small" data-act="clearbots">Remove bots</button></div>
-        <p class="note">Bots act on this device. Keep this screen open while testing.</p>` : ''}
+        <div class="row"><button class="btn small" data-act="fillbots">Fill to 7</button><button class="btn small" data-act="clearbots">Remove all bots</button></div>` : ''}
     </fieldset>` : ''}
     ${warns.map(w => `<p class="warn">${esc(w)}</p>`).join('')}
     ${host ? `<div class="row"><button class="btn pri full" data-act="start" ${list.length < MIN_PLAYERS ? 'disabled' : ''}>Start the game</button></div>` : ''}
-    <div class="row"><button class="btn small" data-act="leave">Leave game</button></div>`);
+    <div class="row"><button class="btn small" data-act="leave">Leave game</button>${game.createdBy === myUid ? `<button class="btn small blood" data-act="delgame" data-code="${esc(code)}">Delete game</button>` : ''}</div>`);
 }
 
 // ---- 16. ARTWORK: medallions, death reveals, player status, win overlays, live scenes ----
@@ -1891,6 +1928,8 @@ document.addEventListener('click', async e => {
           up[`players.bot_${Math.random().toString(36).slice(2, 9)}`] = { name: free[i], alive:true, bot:true, joinedAt: now() + i };
         if(Object.keys(up).length) return upd(up); return;
       }
+      case 'removebot': { const b = uids().filter(x => players()[x].bot).pop(); if(b) return upd({ [`players.${b}`]: null }); return; }
+      case 'delgame': return deleteGame(el.dataset.code);
       case 'clearbots': { const up = {}; for(const b of uids().filter(x => players()[x].bot)) up[`players.${b}`] = null; return upd(up); }
       case 'role': return flipRole(() => { roleOpen = !roleOpen; clearTimeout(roleTimer);
         if(roleOpen) roleTimer = setTimeout(() => flipRole(() => { roleOpen = false; renderRole(); }), 10000); renderRole(); });
@@ -1962,9 +2001,9 @@ if(document.fonts) document.fonts.ready.then(fitTagline);
   const q = new URLSearchParams(location.search);
   if(q.get('join')) $('in-code').value = q.get('join').toUpperCase();
   const cc = q.get('crier') || ss.get('howlertown_crier_game');
-  if(cc){ const g = await DB.get(`${GAMES}/${cc.toUpperCase()}`).catch(() => null); if(g) return enterCrier(cc.toUpperCase()); ss.del('howlertown_crier_game'); }
+  if(cc){ const g = await DB.get(`${GAMES}/${cc.toUpperCase()}`).catch(() => null); if(fresh(g)) return enterCrier(cc.toUpperCase()); ss.del('howlertown_crier_game'); }
   const saved = ls.get('howlertown_current_game');
-  if(saved){ const g = await DB.get(`${GAMES}/${saved}`).catch(() => null); if(g && g.players?.[myUid]) return enterGame(saved); ls.del('howlertown_current_game'); }
+  if(saved){ const g = await DB.get(`${GAMES}/${saved}`).catch(() => null); if(fresh(g) && g.players?.[myUid]) return enterGame(saved); ls.del('howlertown_current_game'); }
   showHome();
 })();
 </script></body></html>
