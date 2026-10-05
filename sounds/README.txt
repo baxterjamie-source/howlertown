@@ -16,10 +16,11 @@ Events (Sound panel: "Event sounds")
                       throws its head back each time), and at nightfall the moment the howling wolf appears
                       in the animation. About 2 seconds long is ideal.
   witch-cackle.mp3    Witch's cackle. At random during the night, only while the Witch is alive.
-  wolf-snarl.mp3      Mauling / snarling. At random during the night.
+  wolf-snarl.mp3      Mauling / snarling. At random during the night, and the growl that opens the dawn animation.
   wolf-attacks.mp3    The wolves attack. 3 to 5 seconds (at random) after the pack agrees on a victim.
                       Doesn't play on a night the wolves can't agree.
-  death-reveal.mp3    Door creak or scream. When dawn reveals who died.
+  rooster.mp3         Rooster crow. At dawn, while the screen is black, just before the village is revealed.
+  death-reveal.mp3    Door creak or scream. When dawn reveals who died (once the circle has opened).
   gavel.mp3           Gavel or crowd gasp. When the verdict is announced.
   trapdoor.mp3        Hangman's trapdoor dropping. 1.5 seconds after someone is voted to hang.
   village-win.mp3     The village wins.

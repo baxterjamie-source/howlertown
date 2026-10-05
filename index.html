@@ -220,6 +220,7 @@ body.crier .risename{font-size:5.5vh}
 .c-bigsign span{display:block;font-size:.5em;color:#f1e7cf;margin-top:.3em}
 /* ---- Nightfall / dawn animation ---- */
 #intro{position:fixed;inset:0;z-index:58;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4vh;background:radial-gradient(circle at 50% 46%,rgba(22,28,48,.97),rgba(5,7,12,.99) 70%)}
+.intro-black{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
 .intro-title{font-family:var(--serif);color:var(--ember);font-size:clamp(28px,6vh,64px);text-shadow:0 2px 14px #000;letter-spacing:.04em}
 /* The frame (rim + night background) stays still; only the characters inside it change. */
 .intro-wrap{position:relative}
@@ -313,6 +314,7 @@ const SOUNDS = {
   cackle:      { cat:'event',   label:'Witch’s cackle', files:['witch-cackle.mp3'], vol:.8 },
   snarl:       { cat:'event',   label:'Wolf snarl',       files:['wolf-snarl.mp3'], vol:.8 },
   wolfAttack:  { cat:'event',   label:'Wolves attack',    files:['wolf-attacks.mp3'] },
+  rooster:     { cat:'event',   label:'Rooster',          files:['rooster.mp3'] },
   deathReveal: { cat:'event',   label:'Door creak / scream', files:['death-reveal.mp3'] },
   gavel:       { cat:'event',   label:'Gavel / gasp',     files:['gavel.mp3'] },
   trapdoor:    { cat:'event',   label:'Trapdoor drop',    files:['trapdoor.mp3'] },
@@ -380,6 +382,13 @@ function soundWatch(){
   // The loud howl lands with the wolf's howl in the nightfall animation; the death sound waits for the dawn one.
   const since = ph.introAt ? now() - ph.introAt : 0;
   if(ph.name === 'night') later(Math.max(0, introHowlAt(ph) - since), () => playSound('cardHowl'));     // the single howl, with the portrait
+  // Dawn: the wolf growls as the animation opens, the rooster crows once the screen is fully black
+  // (before the circle opens), and the death sound waits until the circle is fully open.
+  if(ph.name === 'dawn' && ph.intro){
+    if(since < 1500) playSound('snarl');
+    const blackDone = introSeqMs((ph.intro.faces || []).length) - DAWN.skip + DAWN.blackAt + DAWN.black;
+    if(since < blackDone + 500) later(Math.max(0, blackDone - since), () => playSound('rooster'));
+  }
   if(ph.name === 'dawn' && ph.deaths?.length) later(Math.max(0, (ph.intro?.ms || 0) - since), () => playSound('deathReveal'));
   if(ph.name === 'day') startLoop('murmur');
   if(ph.name === 'vote' && ph.round !== 2) playSound('bell');
@@ -749,7 +758,11 @@ function introFaces(al, s){
 // holds, then howls; then smoke. Dawn plays the same timeline backwards and ends in the same smoke.
 const INTRO = { step:1000, newOp:.4, blurPer:2.5, maxBlur:12, wolfIn:1200, wolfHold:500, howlIn:400, howlHold:1200, puff:1800 };
 const introSeqMs = n => n * INTRO.step + INTRO.wolfIn + INTRO.wolfHold + INTRO.howlIn + INTRO.howlHold;
-const introMs = faces => introSeqMs(faces.length) + INTRO.puff;
+// Dawn skips the howl (it opens on the plain wolf, growling), and after the smoke it fades to black
+// and the game screen opens in a fast expanding circle from the well.
+// The screen holds on black for a moment (the rooster crows then) before the circle opens.
+const DAWN = { skip: INTRO.howlIn + INTRO.howlHold, blackAt: INTRO.puff - 300, black: 600, hold: 1200, iris: 800 };
+const introMs = (faces, dawn) => dawn ? introSeqMs(faces.length) - DAWN.skip + DAWN.blackAt + DAWN.black + DAWN.hold + DAWN.iris : introSeqMs(faces.length) + INTRO.puff;
 async function startNight(n){
   const s = settingsOf(game), d = dur(s), t = now();
   const al = aliveUids(); const wolves = al.filter(u => secrets[u]?.role === 'werewolf').length;
@@ -1958,6 +1971,7 @@ function renderIntro(){
     if(introKey){ introKey = null; el.classList.add('hidden'); el.innerHTML = ''; } return;
   }
   const key = `g${game.gameNo}-${ph.name}${ph.n}-${ph.introAt}`; if(introKey === key) return; introKey = key;
+  el.style.webkitMaskImage = el.style.maskImage = '';
   const dawn = ph.name === 'dawn', faces = ph.intro.faces || [], k = faces.length, I = INTRO;
   const portrait = a => ART[a]?.portrait || ART.villager1.portrait;
   el.innerHTML = `<div class="intro-title">${dawn ? 'Dawn' : 'Night ' + ph.n}</div><div class="intro-wrap"><div class="intro-med">` +
@@ -1967,9 +1981,18 @@ function renderIntro(){
   const elapsed = now() - ph.introAt, seqMs = introSeqMs(k), total = ph.intro.ms;
   const W = k * I.step, H = W + I.wolfIn + I.wolfHold, inT = Math.min(I.step * .6, 400);
   const o = x => Math.min(1, Math.max(0, x / seqMs));
-  // Every layer runs on one timeline, written as nightfall; dawn runs the same timeline backwards.
-  const run = (node, kf) => { const a = node.animate(kf, { duration: seqMs, fill:'both', direction: dawn ? 'reverse' : 'normal' }); a.currentTime = Math.min(elapsed, seqMs); };
-  el.animate([{ opacity:0 }, { opacity:1, offset:400 / total }, { opacity:1, offset:1 - 700 / total }, { opacity:0 }], { duration: total, fill:'forwards' }).currentTime = elapsed;
+  // Every layer runs on one timeline, written as nightfall; dawn runs the same timeline backwards,
+  // starting just after the howl (on the plain wolf), so it skips that part.
+  const skip = dawn ? DAWN.skip : 0, seqEnd = seqMs - skip;
+  const run = (node, kf) => { const a = node.animate(kf, { duration: seqMs, fill:'both', direction: dawn ? 'reverse' : 'normal' }); a.currentTime = Math.min(elapsed + skip, seqMs); };
+  if(dawn){
+    // Dawn: smoke, then everything fades to black, then the game screen opens in a fast circle from the well.
+    el.animate([{ opacity:0 }, { opacity:1, offset:400 / total }, { opacity:1 }], { duration: total, fill:'forwards' }).currentTime = elapsed;
+    el.insertAdjacentHTML('beforeend', '<div class="intro-black"></div>');
+    const blackAt = seqEnd + DAWN.blackAt, irisAt = blackAt + DAWN.black + DAWN.hold;
+    el.querySelector('.intro-black').animate([{ opacity:0 }, { opacity:0, offset: blackAt / total }, { opacity:1, offset: (blackAt + DAWN.black) / total }, { opacity:1 }], { duration: total, fill:'forwards' }).currentTime = elapsed;
+    if(elapsed < total) setTimeout(() => { if(introKey === key) introIris(el, Math.min(DAWN.iris, total - Math.max(elapsed, irisAt))); }, Math.max(0, irisAt - elapsed));
+  } else el.animate([{ opacity:0 }, { opacity:1, offset:400 / total }, { opacity:1, offset:1 - 700 / total }, { opacity:0 }], { duration: total, fill:'forwards' }).currentTime = elapsed;
   const imgs = el.querySelectorAll('.intro-face');
   // Faces pile up on top of each other: each lands sharp but see-through, and everything under it blurs further.
   faces.forEach((_, i) => {
@@ -1986,8 +2009,19 @@ function renderIntro(){
     { opacity:1, transform:'scale(1.12)', offset:o(H + I.howlIn + 250) }, { opacity:1, transform:'scale(1.04)', offset:o(H + I.howlIn + 700) }, { opacity:1, transform:'scale(1.04)', offset:1 }]);
   run(el.querySelector('.intro-med'), [{ borderColor:'#e0a24a', offset:0 }, { borderColor:'#e0a24a', offset:o(H) }, { borderColor:'#b3352a', offset:o(H + I.howlIn) }, { borderColor:'#b3352a', offset:1 }]);
   // Both directions end the same way: the portrait vanishes in a puff of smoke.
-  if(elapsed < seqMs) setTimeout(() => { if(introKey === key) introSmoke(el); }, seqMs - elapsed);
+  if(elapsed < seqEnd) setTimeout(() => { if(introKey === key) introSmoke(el); }, seqEnd - elapsed);
   setTimeout(render, total - elapsed + 60);           // then the night screen (or the dawn reveal) takes over
+}
+// The game screen opens from black in an expanding circle centred on the well.
+function introIris(el, ms){
+  const p = document.querySelector('.banner svg').createSVGPoint(); p.x = 657; p.y = 567;          // the well, in painting units
+  const q = p.matrixTransform(document.querySelector('.banner svg').getScreenCTM()), maxR = Math.hypot(innerWidth, innerHeight);
+  const t0 = performance.now();
+  const step = t => { const f = Math.min(1, (t - t0) / Math.max(1, ms)), r = maxR * (f * f);           // starts slow, then rushes out
+    const m = `radial-gradient(circle at ${q.x}px ${q.y}px, transparent ${r}px, #000 ${r + 1}px)`;
+    el.style.webkitMaskImage = el.style.maskImage = m;
+    if(f < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
 }
 function introSmoke(el){
   const wrap = el.querySelector('.intro-wrap'), med = el.querySelector('.intro-med'), title = el.querySelector('.intro-title'); if(!wrap) return;
