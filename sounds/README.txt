@@ -17,6 +17,8 @@ Events (Sound panel: "Event sounds")
                       (the wolf by the well throws its head back each time). About 2 seconds long is ideal.
   witch-cackle.mp3    Witch's cackle. At random during the night, only while the Witch is alive.
   wolf-snarl.mp3      Mauling / snarling. At random during the night.
+  wolf-attacks.mp3    The wolves attack. 3 to 5 seconds (at random) after the pack agrees on a victim.
+                      Doesn't play on a night the wolves can't agree.
   death-reveal.mp3    Door creak or scream. When dawn reveals who died.
   gavel.mp3           Gavel or crowd gasp. When the verdict is announced.
   trapdoor.mp3        Hangman's trapdoor dropping. 1.5 seconds after someone is voted to hang.
