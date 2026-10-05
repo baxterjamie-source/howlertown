@@ -29,9 +29,9 @@ Events (Sound panel: "Event sounds")
 To add variety later, a slot can list several files and one is picked at random:
 see the SOUNDS list near the top of the script in index.html.
 
-Each sound also has its own volume in the game (the murmur already plays at 35%, the
-distant howl at 60%). If one sounds too loud or too soft in play, ask for it to be adjusted
-there rather than re-editing the file.
+Each sound also has its own volume in the game (the murmur plays at just 7% so people can
+talk over it; the distant howl at 60%). If one sounds too loud or too soft in play, ask for it
+to be adjusted there rather than re-editing the file.
 
 
 Preparing files in Audacity (free: audacityteam.org)
