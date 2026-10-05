@@ -1149,7 +1149,55 @@ const FX = {
   // Chimney tops (the same on the night, dawn and day paintings): smoke rises from these all day and night.
   chimneys: [[47,153],[203,273],[347,220],[497,343],[887,267],[1113,220]],
   sun: { x:600, y:192 },                   // over the forest road, left of the tower; rises as dawn turns to day
+  // Placed by the owner with tools/preview/place.html: [x, y, w, h] window glass, [x, y, size] eye pairs.
+  windows: [[53,384,5,12],[53,400,5,12],[53,415,5,12],[64,415,6,11],[63,399,6,12],[63,383,6,11],[120,377,5,11],[120,392,5,11],[120,405,5,11],[129,376,5,11],[129,390,5,11],[129,405,5,9],[173,198,2,12],
+    [338,390,2,3],[342,390,2,3],[338,396,2,3],[343,396,2,3],[338,402,3,4],[343,402,2,4],[392,228,8,14],[488,299,3,10],[474,300,3,9],[460,301,3,9],[447,301,3,9],[494,321,4,13],[1175,315,10,37],
+    [947,338,4,11],[1122,200,3,14],[955,249,3,11],[943,252,3,11],[977,249,2,10],[991,253,2,9],[739,343,4,12],[738,376,6,14]],
+  eyes: [[673,346,1],[666,349,1],[688,358,1],[816,450,2],[422,485,2]],
 };
+// Windows: all dark at night; random ones glow for a while (sometimes a silhouette passes), and a
+// howl at nightfall wakes several at once. Eyes: now and then a pair appears at a hiding spot, blinks, fades.
+// Panes that sit within a few units of each other are one window: they light, dim and show a passer-by together.
+const WIN_GROUPS = (() => {
+  const n = FX.windows.length, parent = [...Array(n).keys()], find = a => parent[a] === a ? a : (parent[a] = find(parent[a]));
+  const near = ([ax, ay, aw, ah], [bx, by, bw, bh]) => ax <= bx + bw + 5 && bx <= ax + aw + 5 && ay <= by + bh + 5 && by <= ay + ah + 5;
+  for(let a = 0; a < n; a++) for(let b = a + 1; b < n; b++) if(near(FX.windows[a], FX.windows[b])) parent[find(a)] = find(b);
+  const groups = {}; FX.windows.forEach((_, i) => (groups[find(i)] = groups[find(i)] || []).push(FX.windows[i]));
+  return Object.values(groups).map(panes => {
+    const x0 = Math.min(...panes.map(p => p[0])), y0 = Math.min(...panes.map(p => p[1])), x1 = Math.max(...panes.map(p => p[0] + p[2])), y1 = Math.max(...panes.map(p => p[1] + p[3]));
+    return { panes, box: [x0, y0, x1 - x0, y1 - y0] };
+  });
+})();
+const litNow = new Set();
+function fxLight(i, ms){
+  const g = $('fx-w' + i); if(!g || litNow.has(i)) return; litNow.add(i);
+  const [x, y, w, h] = WIN_GROUPS[i].box, lit = g.querySelector('.fx-lit');
+  lit.animate([{ opacity:0 }, { opacity:.9, offset:.06 }, { opacity:.72, offset:.3 }, { opacity:.88, offset:.55 }, { opacity:.75, offset:.8 }, { opacity:.85, offset:.94 }, { opacity:0 }],
+    { duration: ms, easing:'ease-in-out', fill:'forwards' }).finished.then(() => litNow.delete(i));
+  if(Math.random() < .35 && w >= 3){                               // someone walks past the window
+    const s = document.createElementNS('http://www.w3.org/2000/svg', 'g'), hh = Math.min(h * .9, w * 2.2), ltr = Math.random() < .5;
+    s.setAttribute('clip-path', `url(#fx-wc${i})`);
+    s.innerHTML = `<g fill="#1a110c"><circle cx="0" cy="${y + h - hh * .62}" r="${hh * .2}"/><ellipse cx="0" cy="${y + h + hh * .05}" rx="${hh * .34}" ry="${hh * .4}"/></g>`;
+    g.appendChild(s);
+    s.firstChild.animate([{ transform:`translateX(${ltr ? x - w * .8 : x + w * 1.8}px)` }, { transform:`translateX(${ltr ? x + w * 1.8 : x - w * .8}px)` }],
+      { duration: 1800 + Math.random() * 1600, delay: ms * (.2 + Math.random() * .4), fill:'both', easing:'ease-in-out' }).finished.then(() => s.remove());
+  }
+}
+function fxWindowsLoop(){
+  if(fxNight() && litNow.size < 4 && WIN_GROUPS.length) fxLight(Math.floor(Math.random() * WIN_GROUPS.length), 6000 + Math.random() * 9000);
+  setTimeout(fxWindowsLoop, 2000 + Math.random() * 3500);
+}
+function fxStartle(){ for(let k = 0; k < 3 + Math.floor(Math.random() * 3); k++) setTimeout(() => fxLight(Math.floor(Math.random() * WIN_GROUPS.length), 5000 + Math.random() * 6000), k * 350 + Math.random() * 300); }
+function fxEyesLoop(){
+  const layer = $('fx-eyes');
+  if(layer && fxNight() && FX.eyes.length){
+    const [x, y, s] = FX.eyes[Math.floor(Math.random() * FX.eyes.length)], e = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    e.innerHTML = `<circle cx="${x}" cy="${y}" r="${s * 3}" fill="url(#fx-eyeglow)"/><ellipse cx="${x - s * .9}" cy="${y}" rx="${s * .55}" ry="${s * .38}" fill="#ffd23a"/><ellipse cx="${x + s * .9}" cy="${y}" rx="${s * .55}" ry="${s * .38}" fill="#ffd23a"/>`;
+    layer.appendChild(e);
+    e.animate([{ opacity:0 }, { opacity:1, offset:.12 }, { opacity:1, offset:.42 }, { opacity:0, offset:.46 }, { opacity:1, offset:.5 }, { opacity:1, offset:.85 }, { opacity:0 }], { duration: 3200 + Math.random() * 2000, fill:'forwards' }).finished.then(() => e.remove());
+  }
+  setTimeout(fxEyesLoop, 6000 + Math.random() * 9000);
+}
 // The sun climbs over the forest road as each day begins, and stays up until night.
 let sunKey = null;
 function fxSun(){
@@ -1211,12 +1259,18 @@ function fxInit(){
       <radialGradient id="fx-moonface" cx=".42" cy=".38" r=".7"><stop offset="0" stop-color="#fffaf0"/><stop offset=".7" stop-color="#f1e8cc"/><stop offset="1" stop-color="#d9cfae"/></radialGradient>
       <radialGradient id="fx-sunface"><stop offset="0" stop-color="#fffbe8"/><stop offset=".7" stop-color="#fff1b8"/><stop offset="1" stop-color="#ffe08a"/></radialGradient>
       <radialGradient id="fx-sunhalo"><stop offset="0" stop-color="#fff3c4" stop-opacity=".6"/><stop offset=".25" stop-color="#ffe7a0" stop-opacity=".25"/><stop offset="1" stop-color="#ffe7a0" stop-opacity="0"/></radialGradient>
+      <radialGradient id="fx-eyeglow"><stop offset="0" stop-color="#ffd23a" stop-opacity=".35"/><stop offset="1" stop-color="#ffd23a" stop-opacity="0"/></radialGradient>
+      <radialGradient id="fx-wglow"><stop offset="0" stop-color="#ffb256" stop-opacity=".35"/><stop offset="1" stop-color="#ffb256" stop-opacity="0"/></radialGradient>
+      ${WIN_GROUPS.map((g, i) => `<clipPath id="fx-wc${i}">${g.panes.map(([x, y, w, h]) => `<rect x="${x}" y="${y}" width="${w}" height="${h}"/>`).join('')}</clipPath>`).join('')}
       <clipPath id="fx-flagclip"><rect x="${FLAG.x}" y="${FLAG.y}" width="${FLAG.w}" height="${FLAG.h}"/></clipPath>
     </defs><g id="fx-smoke"></g>
     <g id="fx-flag"><g class="fx-flagwave" clip-path="url(#fx-flagclip)"><use href="#imN"/><use href="#imA"/><use href="#imD"/></g></g>
     <g id="fx-sun" style="opacity:0;transition:opacity 3s ease"><g transform="translate(${FX.sun.x} ${FX.sun.y})"><g id="fx-sun-in">
       <circle r="90" fill="url(#fx-sunhalo)"/><circle r="17" fill="url(#fx-sunface)"/></g></g></g>
     <g id="fx-leaves"></g><g id="fx">
+      <g id="fx-windows">${WIN_GROUPS.map(({ panes, box: [x, y, w, h] }, i) => `<g id="fx-w${i}">${panes.map(([px, py, pw, ph]) => `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" fill="#120d0b" opacity=".86"/>`).join('')}` +
+        `<g class="fx-lit" opacity="0"><ellipse cx="${x + w / 2}" cy="${y + h / 2}" rx="${w * 1.6 + 4}" ry="${h * 1.1 + 4}" fill="url(#fx-wglow)"/>${panes.map(([px, py, pw, ph]) => `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" fill="#ffb84f"/>`).join('')}</g></g>`).join('')}</g>
+      <g id="fx-eyes"></g>
       <g id="fx-fog">${FOG_BANKS.map(([x, y, w], i) => `<ellipse class="fx-fogbank" cx="${x}" cy="${y}" rx="${w}" ry="${w * .16}" fill="url(#fx-fogg)" style="animation-duration:${(38 + i * 7)}s;animation-delay:-${r(0, 30)}s"/>`).join('')}
         ${[0, 1, 2].map(i => `<ellipse class="fx-fogroad" cx="660" cy="300" rx="70" ry="14" fill="url(#fx-fogg)" style="animation-delay:-${i * 6}s"/>`).join('')}</g>
       ${FX.stars.map(([x, y]) => `<circle class="fx-star" cx="${x}" cy="${y}" r="${r(1.6, 2.6)}" fill="url(#fx-star)" style="animation-duration:${r(2.5, 6)}s;animation-delay:-${r(0, 6)}s"/>`).join('')}
@@ -1226,7 +1280,7 @@ function fxInit(){
         `<circle class="fx-glow" cx="${t.x}" cy="${t.y}" r="${t.big ? 30 : 15}" fill="url(#fx-glow)" style="animation-duration:${r(1.1, 1.6)}s;animation-delay:-${r(0, 2)}s"/>`).join('')}
       <g id="fx-dyn"></g>
     </g>`);
-  fxSchedule(); fxSmoke();
+  fxSchedule(); fxSmoke(); fxWindowsLoop(); setTimeout(fxEyesLoop, 8000);
 }
 // The moon rises over the forest road as each night begins (once the nightfall animation has finished).
 let moonKey = null;
@@ -1236,6 +1290,9 @@ function fxMoon(){
   const key = night ? `${game.gameNo}-${ph.n}` : null; if(key === moonKey) return; moonKey = key;
   el.getAnimations().forEach(a => a.cancel());
   if(!night) return;                                         // lobby, deal and the end show it already up
+  // The nightfall howl wakes the village: several windows light up at once (just after the animation clears).
+  const howl = (ph.introAt || now()) + (ph.intro?.ms || 0) - now();
+  if(howl > -3000) setTimeout(fxStartle, Math.max(0, howl) + 300);
   const start = ph.startedAt || now(), since = now() - start;
   const a = el.animate([{ transform:'translateY(46px)', opacity:0 }, { opacity:1, offset:.5 }, { transform:'translateY(0)', opacity:1 }], { duration:9000, easing:'cubic-bezier(.3,.1,.3,1)', fill:'both' });
   a.currentTime = since;                                     // negative waits until the animation ends; late joiners see it partway
