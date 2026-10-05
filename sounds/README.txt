@@ -11,10 +11,10 @@ Ambient (Sound panel: "Ambient sounds")
   bell.mp3            Village bell. Plays when voting opens.
 
 Events (Sound panel: "Event sounds")
-  howl-loud.mp3       Loud howls. At nightfall, the moment the wolf howls at the end of the animation,
-                      and when the wolves win. About 2-3 seconds long is ideal.
-  howl-card.mp3       A single howl. During the card deal, once for every card drawn
-                      (the wolf by the well throws its head back each time). About 2 seconds long is ideal.
+  howl-loud.mp3       Loud howls. When the wolves win.
+  howl-card.mp3       A single howl. During the card deal, once for every card drawn (the wolf by the well
+                      throws its head back each time), and at nightfall the moment the howling wolf appears
+                      in the animation. About 2 seconds long is ideal.
   witch-cackle.mp3    Witch's cackle. At random during the night, only while the Witch is alive.
   wolf-snarl.mp3      Mauling / snarling. At random during the night.
   wolf-attacks.mp3    The wolves attack. 3 to 5 seconds (at random) after the pack agrees on a victim.

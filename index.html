@@ -327,6 +327,12 @@ function loadBuffer(file){
   return buffers[file];
 }
 const isSoundDevice = () => !!game && (crier ? liveCriers()[0] === crierId : isHost() && !liveCriers().length);
+// The sound device fetches and decodes every sound up front, so the first howl isn't late.
+let soundsPreloaded = false;
+function preloadSounds(){
+  if(soundsPreloaded || !audio()) return; soundsPreloaded = true;
+  for(const s of Object.values(SOUNDS)) s.files.forEach(loadBuffer);
+}
 // In test mode the sound device shows a caption for every sound, so timing can be checked before the files exist.
 function soundCaption(text){
   if(!settingsOf(game).test.on) return;
@@ -364,7 +370,7 @@ function soundWatch(){
   if(game.status !== 'playing') return;
   // The loud howl lands with the wolf's howl in the nightfall animation; the death sound waits for the dawn one.
   const since = ph.introAt ? now() - ph.introAt : 0;
-  if(ph.name === 'night') later(Math.max(0, introHowlAt(ph) - since), () => playSound('howlLoud'));
+  if(ph.name === 'night') later(Math.max(0, introHowlAt(ph) - since), () => playSound('cardHowl'));     // the single howl, with the portrait
   if(ph.name === 'dawn' && ph.deaths?.length) later(Math.max(0, (ph.intro?.ms || 0) - since), () => playSound('deathReveal'));
   if(ph.name === 'day') startLoop('murmur');
   if(ph.name === 'vote' && ph.round !== 2) playSound('bell');
@@ -408,6 +414,7 @@ function soundButtonHTML(){
   return `<button class="btn small" data-act="snd-open">Sound</button>` + (audioLocked() ? ` <button class="btn small pri" data-act="snd-unlock">Click to enable sound</button>` : '');
 }
 function renderSoundUI(){
+  if(game && isSoundDevice()) preloadSounds();
   const show = game && (crier || isSoundDevice());
   setHTML('sndui', !show ? '' : soundPanelHTML() + `<div class="row">${soundButtonHTML()}${crier ? '<button class="btn small c-leave" data-act="crier-leave">Leave Town Crier</button>' : ''}</div>`);
   const v = document.querySelector('[data-snd=volume]'); if(v && document.activeElement !== v) v.value = soundPrefs.volume;
@@ -549,7 +556,9 @@ function settingsOf(g){ return { ...DEFAULTS, ...(g?.settings || {}), test:{ ...
 function dur(s){
   const f = s.test.on && s.test.fast;
   return f ? { night:12, discussion:20, voteTime:10, speak:5, dawn:6, verdict:12, window:10, minNight:3 }
-           : { night:s.night, discussion:s.discussion, voteTime:s.voteTime, speak:s.speak, dawn:12, verdict:25, window:30, minNight:10 };
+           // A night lasts at least half its length even when everyone acts quickly (bots act in seconds),
+           // so the night feels like a night and its length gives nothing away.
+           : { night:s.night, discussion:s.discussion, voteTime:s.voteTime, speak:s.speak, dawn:12, verdict:25, window:30, minNight: Math.max(10, Math.round(s.night / 2)) };
 }
 const autoWolves = n => n <= 6 ? 1 : n <= 10 ? 2 : n <= 14 ? 3 : 4;
 function roleList(n, s){
@@ -1133,10 +1142,12 @@ function fxInit(){
       <radialGradient id="fx-star"><stop offset="0" stop-color="#fff" stop-opacity="1"/><stop offset=".35" stop-color="#e6edff" stop-opacity=".7"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
       <radialGradient id="fx-halo"><stop offset="0" stop-color="#fff6d8" stop-opacity=".35"/><stop offset=".45" stop-color="#cfd8ff" stop-opacity=".12"/><stop offset="1" stop-color="#cfd8ff" stop-opacity="0"/></radialGradient>
       <linearGradient id="fx-meteor" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".95"/></linearGradient>
-      <mask id="fx-crescent" maskUnits="userSpaceOnUse" x="-40" y="-40" width="80" height="80"><circle r="${m.r}" fill="#fff"/><circle cx="${m.r * .42}" cy="${-m.r * .28}" r="${m.r * .9}" fill="#000"/></mask>
+      <filter id="fx-soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.2"/></filter>
+      <radialGradient id="fx-moonface" cx=".42" cy=".38" r=".7"><stop offset="0" stop-color="#fffaf0"/><stop offset=".7" stop-color="#f1e8cc"/><stop offset="1" stop-color="#d9cfae"/></radialGradient>
     </defs><g id="fx">
       ${FX.stars.map(([x, y]) => `<circle class="fx-star" cx="${x}" cy="${y}" r="${r(1.6, 2.6)}" fill="url(#fx-star)" style="animation-duration:${r(2.5, 6)}s;animation-delay:-${r(0, 6)}s"/>`).join('')}
-      <g id="fx-moon" transform="translate(${m.x} ${m.y})"><g id="fx-moon-in"><circle r="${m.r * 3.2}" fill="url(#fx-halo)"/><circle r="${m.r}" fill="#f7efd0" mask="url(#fx-crescent)"/></g></g>
+      <g id="fx-moon" transform="translate(${m.x} ${m.y})"><g id="fx-moon-in"><circle r="${m.r * 4}" fill="url(#fx-halo)"/><circle r="${m.r}" fill="url(#fx-moonface)"/>
+        <g fill="#b5ab90" opacity=".22" filter="url(#fx-soft)"><ellipse cx="${-m.r * .3}" cy="${-m.r * .25}" rx="${m.r * .32}" ry="${m.r * .22}"/><ellipse cx="${m.r * .28}" cy="${-m.r * .05}" rx="${m.r * .22}" ry="${m.r * .28}"/><ellipse cx="${-m.r * .05}" cy="${m.r * .35}" rx="${m.r * .26}" ry="${m.r * .16}"/><circle cx="${m.r * .45}" cy="${m.r * .42}" r="${m.r * .1}"/></g></g></g>
       ${FX.torches.map(t => `${t.big ? `<ellipse class="fx-pool" cx="${t.x}" cy="${t.y + 95}" rx="120" ry="34" fill="url(#fx-pool)" style="animation-delay:-${r(0, 2)}s"/>` : ''}` +
         `<circle class="fx-glow" cx="${t.x}" cy="${t.y}" r="${t.big ? 30 : 15}" fill="url(#fx-glow)" style="animation-duration:${r(1.1, 1.6)}s;animation-delay:-${r(0, 2)}s"/>`).join('')}
       <g id="fx-dyn"></g>
@@ -1846,7 +1857,8 @@ function introSmoke(el){
   for(const n of [med, title]) n.animate([{ opacity:1, filter:'blur(0px)', transform:'scale(1)' }, { opacity:0, filter:'blur(10px)', transform:'scale(1.08)' }], { duration:500, delay:120, easing:'ease-in', fill:'forwards' });
 }
 // When the howl lands in the nightfall sequence (ms after introAt).
-const introHowlAt = ph => ph?.intro ? (ph.intro.faces || []).length * INTRO.step + INTRO.wolfIn + INTRO.wolfHold + INTRO.howlIn : 2000;
+// The moment the howling wolf starts to appear, not once it has fully faded in.
+const introHowlAt = ph => ph?.intro ? (ph.intro.faces || []).length * INTRO.step + INTRO.wolfIn + INTRO.wolfHold : 2000;
 
 // ---- The deal: a fanned hand of face-down cards, one per player ----
 // Every screen shows the deck. Each draw removes a card and sends the player's name up one of three
