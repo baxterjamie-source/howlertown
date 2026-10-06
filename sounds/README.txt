@@ -27,7 +27,9 @@ Events (Sound panel: "Event sounds")
   fool-win.mp3        The Town Fool wins (also when the Fool is hanged and the game goes on).
   no-death.mp3        Relief: a small crowd, "oh thank goodness" and so on, overlapping. At dawn when nobody
                       died, right after the narrator says so. 5 seconds at most.
-  news-notify.mp3     A short cheerful jingle before "In other news…" after the verdict. 2 seconds at most.
+  news-notify.mp3     Hammer on anvil, four strikes, before "In other news…" after the verdict. The hammer
+                      animation is timed to this exact file (strikes at 0, 0.74, 1.43, 2.16 s), so if you
+                      replace it, ask for the animation to be re-timed.
 
 Nothing ever plays on top of anything else: the narrator waits for sounds to finish, and random
 night sounds fade out quickly when something planned happens. Keep files trimmed tight, because
