@@ -72,6 +72,12 @@ button.pl:hover{border-color:#4a5470}
 .vgroup b .cnt{color:var(--ember);font-family:var(--sans);font-weight:700;font-size:16px}
 .vgroup.vtop{border-color:var(--blood)}
 .vgroup p{margin:4px 0 0;color:var(--dim);font-size:15px}
+/* Runoff: the tied names' groups are the ballot */
+.pl .kick{margin-left:6px;padding:2px 10px;font-size:13px}
+.vgroup.vbtn{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:rgba(224,162,74,.06);cursor:pointer;position:relative}
+.vgroup.vbtn:hover{background:rgba(224,162,74,.12)}
+.vgroup.vsel{border-color:var(--ember);box-shadow:0 0 0 2px var(--ember) inset;background:rgba(224,162,74,.16)}
+.vmine{display:inline-block;margin-top:6px;font-size:13px;font-weight:700;color:var(--ember)}
 #bannerMeds{position:absolute;left:50%;top:48px;transform:translateX(-50%);display:flex;gap:14px;z-index:2;pointer-events:none}
 .role small{color:var(--dim);font-size:14px;display:block}
 .btn{font:inherit;font-size:16px;background:transparent;color:var(--parch);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer}
@@ -98,7 +104,7 @@ legend{padding:0 6px;font-family:var(--serif);font-size:18px}
 @keyframes xfSharp{0%{filter:blur(12px)}55%{filter:blur(6px)}100%{filter:blur(0)}}
 .xfade.same>.med .med-c img{animation:xfPulse 3.4s ease-in-out .3s both}
 @keyframes xfPulse{0%{filter:blur(0)}45%{filter:blur(10px)}100%{filter:blur(0)}}
-.xf-in{opacity:0;animation:xfIn 1.4s ease 2.6s forwards}
+.xf-in{opacity:0;animation:xfIn .9s ease 3.6s forwards}   /* after the face has changed, with the narrator's line (REVEAL_FACE_MS) */
 @keyframes xfIn{to{opacity:1}}
 .forge{width:min(84vw,56vh);margin:0 auto}
 .forge svg{width:100%;display:block;overflow:visible}
@@ -573,6 +579,8 @@ const SND_LEN = { bell:2900, gavel:1200, trapdoor:6100, foolWin:2700, cardHowl:2
 // The news forge: the hammer winds up (lead), then strikes the anvil 4 times, in step with news-notify.mp3
 // (strike times measured from the file, ms after it starts). Tuned in tools/preview/forge.html.
 const FORGE = { lead:600, hits:[0, 740, 1430, 2160], ms:3300 };
+// The hanging reveal: the face changes over this long before the role is shown and spoken (matches .xf-in).
+const REVEAL_FACE_MS = 3700;
 function forgeSVG(){
   const a = ART.anvil || {};
   return `<div class="forge"><svg viewBox="0 0 640 480" aria-hidden="true"><image href="${a.anvil}" x="20" y="170" width="440" height="301" class="fa"/>
@@ -1058,7 +1066,7 @@ async function startGame(){
   if(list.length < MIN_PLAYERS) return;
   const deal = dealRoles(list, s, myUid);
   const pack = list.filter(u => deal[u] === 'werewolf');
-  const art = assignArt(list, deal);
+  const { art, alter } = assignArt(list, deal);
   for(const u of list){
     await DB.set(sp(u), { role: deal[u], pack: deal[u] === 'werewolf' ? pack : null,
       potions: deal[u] === 'witch' ? { save:true, kill:true } : null, seen: {}, night: null, art: art[u] });
@@ -1069,7 +1077,7 @@ async function startGame(){
   // Roles are already dealt in secret; the deck is the show. The cards appear 2 s after Start,
   // and Night 1 begins when the host presses Start the game once every card is drawn.
   const t = now();
-  const up = { status:'playing', revealed:{}, revealedArt:{}, lastNight:null, result:null, foolWon:null, startedAt: t, gameNo: (game.gameNo || 0) + 1,
+  const up = { status:'playing', revealed:{}, revealedArt:{}, alter, lastNight:null, result:null, foolWon:null, startedAt: t, gameNo: (game.gameNo || 0) + 1,
     phase: { name:'deal', n:0, startedAt:t, showAt: t + 2000, cards: list.length, picks:{}, say: mkSay([{ at: t + 2500, t: draw('deal') }]) } };
   for(const u of list) up[`players.${u}.alive`] = true;
   await upd(up);
@@ -1084,15 +1092,19 @@ async function drawCard(u, card){
   });
 }
 const allDrawn = ph => ph?.name === 'deal' && uids().every(u => ph.picks?.[u]);
-// Plain Villagers get the four villager characters at random without replacement, then repeats.
+// Every player gets an alter ego: one of the four villager looks, dealt to everyone alike (shuffled, without
+// replacement, then repeats), whatever their role, so the looks give nothing away. It's public (game.alter):
+// the living stand in the square in it, and a hanged player is shown in it until their role is told.
+// A plain Villager's own character is their alter ego.
 function assignArt(list, deal){
-  const art = {}; let pool = [];
+  const art = {}, alter = {}; let pool = [];
   for(const u of shuffle(list.slice())){
+    if(!pool.length) pool = shuffle(['villager1','villager2','villager3','villager4']);
+    alter[u] = pool.pop();
     const r = deal[u];
-    if(r === 'villager'){ if(!pool.length) pool = shuffle(['villager1','villager2','villager3','villager4']); art[u] = pool.pop(); }
-    else art[u] = r === 'werewolf' ? 'wolf' : r;
+    art[u] = r === 'villager' ? alter[u] : r === 'werewolf' ? 'wolf' : r;
   }
-  return art;
+  return { art, alter };
 }
 const artOf = u => secrets[u]?.art || (secrets[u]?.role === 'werewolf' ? 'wolf' : secrets[u]?.role) || 'villager1';
 // The nightfall animation's faces (art keys only, no names), worked out by the host.
@@ -1126,9 +1138,11 @@ async function startNight(n){
   if(wolves >= al.length - wolves){
     wolfEndsAt = s.parityTimer === 'short' ? t0 + d.night * 500 : s.parityTimer === 'sudden' ? t0 + 15000 : null;
   }
-  // The night's silly questions: one shared question at a time, in a fresh shuffled order each night.
-  const order = shuffle([...FILLERS.keys()]);
-  await DB.set(`${gp()}/live/filler`, { n, round:1, q: order[0], order, roundAt: t0, picks:{}, past:[] });
+  // The night's silly questions: one shared question at a time, at most 2 a night, drawn from a bag that
+  // lasts the whole game (no question repeats until all have been asked). used = news items already told.
+  const prev = filler || {}, bag = prev.bag?.length ? [...prev.bag] : shuffle([...FILLERS.keys()]);
+  const q = bag.shift();
+  await DB.set(`${gp()}/live/filler`, { n, round:1, q, bag, used: prev.used || [], roundAt: t0, picks:{}, past:[] });
   // The narrator speaks as the faces pile up, and must finish before the wolf howls.
   const howl = faceMs(faces.length) + INTRO.wolfIn + INTRO.wolfHold, room = howl - 400 - 800;
   const say = mkSay([{ at: t + 400, by: t + howl - 300, t: draw('night', { w: pubWolves() }, l => sayMs(l) <= room) }]);
@@ -1164,7 +1178,7 @@ async function stepNight(ph, t){
   // Free: villagers and the Fool; wolves once the hunt is set; the Doctor and Witch once they've acted.
   // The Seer keeps their check list all night, so they're never waited for.
   const f = filler;
-  if(f?.n === n && t >= ph.startedAt && t >= (f.roundAt || 0) + 2500){
+  if(f?.n === n && f.round < 2 && t >= ph.startedAt && t >= (f.roundAt || 0) + 2500){
     const free = al.filter(u => { const r = secrets[u]?.role;
       if(r === 'seer') return false;
       if(r === 'werewolf') return !!locked;
@@ -1173,8 +1187,8 @@ async function stepNight(ph, t){
       return true; });
     if(free.length && free.every(u => f.picks?.[u]?.r === f.round)){
       const picks = {}; for(const [u, p] of Object.entries(f.picks || {})) if(p?.r === f.round) picks[u] = p.t || null;
-      const round = f.round + 1, order = f.order?.length ? f.order : [...FILLERS.keys()];
-      await DB.set(`${gp()}/live/filler`, { n, round, q: order[(round - 1) % order.length], order, roundAt: t, picks:{}, past: [...(f.past || []), { q: f.q, picks }] });
+      const bag = f.bag?.length ? [...f.bag] : shuffle([...FILLERS.keys()].filter(i => i !== f.q)), q = bag.shift();
+      await DB.set(`${gp()}/live/filler`, { n, round: f.round + 1, q, bag, used: f.used || [], roundAt: t, picks:{}, past: [...(f.past || []), { q: f.q, picks }] });
     }
   }
   const need = al.filter(u => ['seer','doctor'].includes(secrets[u]?.role) ||
@@ -1272,20 +1286,23 @@ async function stepDay(ph, t){
 }
 async function startVote(n, round, candidates, prev = null){
   const d = dur(settingsOf(game)), t = now();
-  // A runoff first shows how the tied first round went, for 10 s (prev, showUntil); nobody votes meanwhile.
-  const show = prev ? t + 10000 : t;
+  // A runoff is voted on the first round's results screen (prev): who voted for whom stays in view, and the
+  // tied names are the ballot. No pause: people vote when ready, with the information in front of them.
+  const show = t;
   // The bell (first vote only), then the line; the vote clock waits for both.
   const items = round === 2 ? [{ at: show, t: draw('runoff', { names: nameList(candidates.map(nameOf)) }) }] : [{ snd:'bell' }, { t: draw('vote') }];
   const hold = show + scriptMs(items);
   await upd({ phase: { name:'vote', n, round, candidates, votes:{}, startedAt:t, say: mkSay(items), holdUntil: hold, endsAt: hold + d.voteTime * 1000,
-    prev, showUntil: prev ? show : null } });
+    prev } });
 }
 // "In other news…": the question and name with the most picks during night n's silly questions
 // (a random one on a tie), or null if nobody picked anyone.
 function nightNews(n){
   const f = filler; if(f?.n !== n) return null;
   const rounds = [...(f.past || []), { q: f.q, picks: Object.fromEntries(Object.entries(f.picks || {}).filter(([, p]) => p?.r === f.round).map(([u, p]) => [u, p.t])) }];
-  const tally = {}; for(const r of rounds) for(const t of Object.values(r.picks || {})) if(t && players()[t]) tally[`${r.q}|${t}`] = (tally[`${r.q}|${t}`] || 0) + 1;
+  // A news item (question + name) is never told twice in a game.
+  const used = new Set(f.used || []);
+  const tally = {}; for(const r of rounds) for(const t of Object.values(r.picks || {})) if(t && players()[t] && !used.has(`${r.q}|${t}`)) tally[`${r.q}|${t}`] = (tally[`${r.q}|${t}`] || 0) + 1;
   const max = Math.max(0, ...Object.values(tally)); if(!max) return null;
   const [q, u] = rnd(Object.keys(tally).filter(k => tally[k] === max)).split('|');
   return { q: +q, u };
@@ -1305,6 +1322,7 @@ async function stepVote(ph, t){
   if(top.length > 1 && ph.round === 1) return startVote(ph.n, 2, top, { tally, votes: s.votes === 'public' ? (ph.votes || {}) : null });
   const reason = eliminated ? 'elected' : (top.length > 1 ? 'tie' : 'none');
   const news = nightNews(ph.n);
+  if(news) await DB.update(`${gp()}/live/filler`, { used: [...(filler?.used || []), `${news.q}|${news.u}`] }).catch(() => {});
   const up = { phase: { name:'verdict', n: ph.n, startedAt:t, endsAt: t + d.verdict * 1000, eliminated, reason, round: ph.round, tally,
     votes: s.votes === 'public' ? (ph.votes || {}) : null, foolEnd: false, news } };
   // With roles revealed, the hanged player's role stays hidden until the narrator tells it (after the trapdoor):
@@ -1312,16 +1330,18 @@ async function stepVote(ph, t){
   if(eliminated){
     const r = secrets[eliminated]?.role || 'villager';
     if(r === 'fool'){ up.phase.foolEnd = s.foolWin === 'end'; if(!s.reveal) up.foolWon = eliminated; }
-    if(s.reveal) up.phase.disguise = r === 'villager' ? artOf(eliminated) : ['villager1','villager2','villager3','villager4'][hashStr(eliminated) % 4];
+    if(s.reveal) up.phase.disguise = game.alter?.[eliminated] || (r === 'villager' ? artOf(eliminated) : 'villager1');
   }
   // Built before the hanged player is marked dead, so the wolf count it uses is still the public one.
   const items = verdictScript(eliminated, reason, news, up.phase.foolEnd);
+  // The face changes first (the 3.4 s crossfade starts at revealAt), then the role text and the narrator's line.
+  const ri = items.findIndex(it => it.role);
+  if(ri >= 0){ up.phase.revealAt = t + scriptMs(items.slice(0, ri)); items.splice(ri, 0, { gap: REVEAL_FACE_MS }); }
   // The news: the forge (forgeAt), with the jingle fixed to the hammer's first strike, then the news card
   // while the news is read (newsAt…newsUntil). Who voted for whom stays up at least 10 s.
   const ni = items.findIndex(it => it.snd === 'newsNotify'), lead = ni >= 0 ? FORGE.lead : 0;
   if(ni >= 0){ const forge = t + scriptMs(items.slice(0, ni)); items[ni].at = forge + FORGE.lead;
     up.phase.forgeAt = forge; up.phase.newsAt = forge + FORGE.ms; up.phase.newsUntil = t + scriptMs(items) + lead + 1500; }
-  const ri = items.findIndex(it => it.role); if(ri >= 0) up.phase.revealAt = t + scriptMs(items.slice(0, ri));
   up.phase.say = mkSay(items); up.phase.endsAt = t + Math.max(d.verdict * 1000, 10000, scriptMs(items) + lead + 2500);
   if(eliminated) up[`players.${eliminated}.alive`] = false;
   await upd(up);
@@ -1414,8 +1434,10 @@ async function runBots(){
           const kill = p.kill && (settingsOf(game).witchBoth || !save) && Math.random() < .15 ? rnd(others(b)) : null;
           await DB.set(ap(b), { n, kind:'witch', save, kill, done:true });
         }
-      } else if(Math.random() < .2){
-        if(filler?.n === n && filler.picks?.[b]?.r !== filler.round && t >= ph.startedAt)          // bots answer the shared silly question
+      } else {
+        // Bots answer the shared silly question at a human pace: 2–20 s after it appears (owner, 2026-10-06).
+        const wait = 2000 + hashStr(`${b}:${n}:${filler?.round}`) % 18000;
+        if(filler?.n === n && filler.picks?.[b]?.r !== filler.round && t >= ph.startedAt && t >= (filler.roundAt || 0) + wait)
           await DB.update(`${gp()}/live/filler`, { [`picks.${b}`]: { r: filler.round, t: Math.random() < .1 ? null : rnd(others(b)) } }).catch(() => {});
       }
     } else if(ph.name === 'day'){
@@ -1491,13 +1513,15 @@ async function joinGame(c){
   if(!g.players?.[myUid]){
     if(g.status !== 'lobby'){ $('home-err').textContent = 'That game has already started.'; return; }
     if(playerCount(g) >= seatCap(g)){ $('home-err').textContent = 'That game is full.'; return; }
-    await DB.update(`${GAMES}/${c}`, { [`players.${myUid}`]: { name, alive:true, bot:false, joinedAt: now() } });
+    await DB.update(`${GAMES}/${c}`, { [`players.${myUid}`]: { name, alive:true, bot:false, joinedAt: now() }, [`kicked.${myUid}`]: null });
   } else await DB.update(`${GAMES}/${c}`, { [`players.${myUid}.name`]: name });
   enterGame(c);
 }
 function enterGame(c){
   leaveListeners(); code = c; ls.set('howlertown_current_game', c);
-  unsubs.push(DB.watch(gp(), g => { game = g; if(!g || g.status === 'deleted'){ leaveGame(); return; } ensureHostSubs(); render(); }));
+  unsubs.push(DB.watch(gp(), g => { game = g; if(!g || g.status === 'deleted'){ leaveGame(); return; }
+    if(!crier && g.kicked?.[myUid] && !g.players?.[myUid]){ leaveGame(); setTimeout(() => { const e = $('home-err'); if(e) e.textContent = 'The host removed you from the game.'; }, 50); return; }
+    ensureHostSubs(); render(); }));
   unsubs.push(DB.watchCol(`${gp()}/actions`, a => { actions = a || {}; render(); }));
   unsubs.push(DB.watch(sp(myUid), s => { mySecret = s; render(); }));
   unsubs.push(DB.watch(`${gp()}/live/filler`, f => { filler = f || {}; render(); }));
@@ -1840,7 +1864,7 @@ function playerList(list, opts = {}){
     const extra = opts.extra?.(u) || '';
     const attrs = opts.act ? `data-act="${opts.act}" data-u="${esc(u)}"` : '';
     const tag = opts.act ? 'button' : 'div';
-    return `<${tag} class="pl${opts.sel === u ? ' sel' : ''}${isAlive(u) ? '' : ' dead'}" ${attrs}><span>${esc(nameOf(u))}${extra}</span><span class="marks">${marks}</span></${tag}>`;
+    return `<${tag} class="pl${opts.sel === u ? ' sel' : ''}${isAlive(u) ? '' : ' dead'}" ${attrs}><span>${esc(nameOf(u))}${extra}</span><span class="marks">${marks}${opts.tail?.(u) || ''}</span></${tag}>`;
   }).join('')}</div>`;
 }
 const initials = u => { const p = nameOf(u).trim().split(/\s+/); return (p.length > 1 ? p[0][0] + p[p.length - 1][0] : p[0].slice(0, 2)).toUpperCase(); };
@@ -1874,7 +1898,9 @@ function renderLobby(){
     ${lobbySec('players', `Players (${list.length})`, (() => { const b = list.filter(u => players()[u].bot).length;
         return `${list.length - b} ${list.length - b === 1 ? 'person' : 'people'}${b ? `, ${b} bot${b === 1 ? '' : 's'}` : ''}${s.seats !== 'any' ? `, ${seatCap(game)} seats` : ''}`; })(), `
     ${playerList(list, { extra: u => (game.hostUid === u ? ' <span class="tag">host</span>' : '') + (players()[u].bot ? ' <span class="tag">bot</span>' : ''),
-      marks: u => players()[u].score ? [{ label: players()[u].score + ' pts' }] : [] })}
+      marks: u => players()[u].score ? [{ label: players()[u].score + ' pts' }] : [],
+      // The host can kick anyone else: a bot, to make room for a person, or a person who has left.
+      tail: u => host && u !== myUid ? `<button class="btn small kick" data-act="kick" data-u="${esc(u)}">Kick</button>` : '' })}
     ${host && list.some(u => players()[u].score) ? '<div class="row"><button class="btn small" data-act="resetscores">Reset scores</button></div>' : ''}
     ${host ? `<div class="row">${list.filter(u => u !== myUid && !players()[u].bot).map(u => `<button class="btn small" data-act="makehost" data-u="${esc(u)}">Make ${esc(nameOf(u))} host</button>`).join('')}</div>` : ''}
     ${(() => { const bots = list.filter(u => players()[u].bot).length, cap = seatCap(game), capped = s.seats !== 'any', open = Math.max(0, cap - list.length);
@@ -2023,7 +2049,8 @@ function renderStatus(){
 const S = 2 / 3;                                  // slot coordinates were laid out on the 1920px painting
 const HGT = y => (185 + (y - 870) * 0.55) * S;    // figure height by baseline (perspective)
 const SLOTS = {
-  villageStand: [[775,925],[1165,965],[830,880],[1125,882],[720,985],[1300,935],[1215,900],[640,925],[1250,990],[560,895],[1390,900],[500,960]],
+  villageStand: [[775,925],[1165,965],[830,880],[1125,882],[720,985],[1300,935],[1215,900],[640,925],[1250,990],[560,895],[1390,900],[500,960],
+    [870,1010],[1090,1015],[450,915],[1465,955]],                      // 16, enough for every living player
   wolfStand:    [[870,955],[1110,975],[990,915],[740,925]],
   // Where the dead lie: nearest the well first
   fall: [[985,958],[840,905],[1130,908],[745,975],[1230,985],[640,935],[1335,940],[990,1010],[560,980],[1420,975],[880,1015],[1100,1015],[520,925],[1450,930],[700,900],[1270,900]],
@@ -2095,6 +2122,15 @@ function nightDeadFigures(){
     .sort((a, b) => a.y - b.y).map(i => i.m).join('');
   return { svg, meds: (ln.deaths || []).map(u => medallion(u, { size:'60px', art: revealedArt(u), rim:'red', name: nameOf(u), inner: revealedArt(u) ? '' : '\u2020', bg:'#2a1416' })).join('') };
 }
+// During the day and the vote, everyone still alive stands in the square in their alter ego (game.alter).
+function villageCrowd(){
+  const ph = game.phase; if(!ph || !['day', 'vote'].includes(ph.name) || !game.alter) return '';
+  const used = {};
+  return uids().filter(isAlive).slice(0, SLOTS.villageStand.length).map((u, i) => { const art = game.alter[u] || 'villager1', [x, y] = SLOTS.villageStand[i];
+    used[art] = (used[art] || 0) + 1;
+    return { y, m: figure(art, 'front', x, y, { grade:'day', flip: used[art] % 2 === 0 }) }; })
+    .sort((a, b) => a.y - b.y).map(f => f.m).join('');
+}
 function sceneSVG(viewBox, withBg){
   const sc = sceneFigures(); if(!sc) return '';
   const bg = withBg ? `<image href="${$(sc.bg).getAttribute('href')}" width="1280" height="720"/>` : '';
@@ -2108,8 +2144,9 @@ function renderBannerScene(){
     setHTML('bannerMeds', ''); return;
   }
   if(game?.status === 'playing'){
-    const nd = nightDeadFigures();
-    setHTML('bannerScene', nd ? `<svg class="scene" viewBox="${BANNER_VB()}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${FIG_DEFS}${nd.svg}</svg>` : '');
+    const nd = nightDeadFigures(), crowd = villageCrowd();
+    const svg = (nd ? nd.svg : '') + crowd;
+    setHTML('bannerScene', svg ? `<svg class="scene" viewBox="${BANNER_VB()}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${FIG_DEFS}${svg}</svg>` : '');
     setHTML('bannerMeds', nd ? nd.meds : '');
     return;
   }
@@ -2265,12 +2302,18 @@ function dayPanel(ph){
     (meAlive ? playerList(opts, { act:'accuse', marks: () => [{ label:'Accuse' }] }) : '<p class="note">The dead cannot accuse.</p>') + ready;
 }
 // Before a runoff: how the tied first round went (shown to everyone for 10 s; no voting meanwhile).
-const runoffPreview = ph => resultsHTML(ph.prev?.tally, ph.prev?.votes, 'A tie! How the village voted') +
-  `<p class="hint" style="margin-top:10px">A runoff between ${esc(nameList(ph.candidates.map(nameOf)))} opens in a moment.</p>`;
+// The runoff is voted on the tied first round's results: who voted for whom stays in view, and the tied
+// names are the buttons (ballot = the uids you may vote for; none on the Crier or for the dead).
+const runoffBoard = (ph, ballot, mine) => resultsHTML(ph.prev?.tally, ph.prev?.votes, 'A tie! How the village voted', { ballot, sel: mine });
 // Votes stay secret until the decision: everyone sees only how many have voted (and you, your own vote).
 function votePanel(ph){
   const al = aliveUids(), mine = ph.votes?.[myUid], cnt = al.filter(u => ph.votes?.[u]).length;
-  if(now() < (ph.showUntil || 0)) return runoffPreview(ph);
+  if(ph.round === 2 && ph.prev){
+    const me = isAlive(myUid), ballot = me ? ph.candidates.filter(u => u !== myUid && isAlive(u)) : [];
+    return `<h2>Runoff vote</h2><p class="hint">${me ? `Tap ${esc(nameList(ph.candidates.map(nameOf)))} to vote. You can change your vote until time runs out. ` : ''}${cnt} of ${al.length} have voted.</p>` +
+      runoffBoard(ph, ballot, mine) +
+      (me ? `<div class="row"><button class="btn ${mine === 'abstain' ? 'pri' : ''}" data-act="vote" data-u="abstain">${mine === 'abstain' ? 'Abstaining' : 'Abstain'}</button></div>` : '');
+  }
   if(!isAlive(myUid)) return `<p class="note">${cnt} of ${al.length} have voted.</p>`;
   const cands = ph.candidates.filter(u => u !== myUid && isAlive(u));
   return `<h2>${ph.round === 2 ? 'Runoff vote' : 'Who hangs today?'}</h2><p class="hint">You can change your vote until time runs out. ${cnt} of ${al.length} have voted.</p>` +
@@ -2283,14 +2326,16 @@ function verdictPanel(ph){
 }
 // Group by who received votes: their name, then who voted for them (public votes) or just the count
 // (anonymous: votes is null). Stable order: most votes first.
-function resultsHTML(tally = {}, votes, title){
+function resultsHTML(tally = {}, votes, title, o = {}){
   const targets = Object.keys(tally).filter(u => tally[u] > 0).sort((a, b) => tally[b] - tally[a] || nameOf(a).localeCompare(nameOf(b)));
   if(!targets.length) return `<h2>${title}</h2><p class="note">Nobody voted for anyone.</p>`;
   const max = tally[targets[0]];
   const voters = c => votes ? Object.keys(votes).filter(v => votes[v] === c).map(nameOf).sort() : null;
   let h = `<h2>${title}</h2>` + targets.map(u => {
-    const vs = voters(u);
-    return `<div class="vgroup${tally[u] === max ? ' vtop' : ''}"><b><span>${esc(nameOf(u))}</span><span class="cnt">${tally[u]} vote${tally[u] === 1 ? '' : 's'}</span></b>${vs ? `<p>${esc(vs.join(', '))}</p>` : ''}</div>`;
+    const vs = voters(u), inner = `<b><span>${esc(nameOf(u))}</span><span class="cnt">${tally[u]} vote${tally[u] === 1 ? '' : 's'}</span></b>${vs ? `<p>${esc(vs.join(', '))}</p>` : ''}`;
+    if((o.ballot || []).includes(u))                                  // runoff: this group is a vote button
+      return `<button class="vgroup vbtn${tally[u] === max ? ' vtop' : ''}${o.sel === u ? ' vsel' : ''}" data-act="vote" data-u="${esc(u)}">${inner}${o.sel === u ? '<span class="vmine">Your vote</span>' : ''}</button>`;
+    return `<div class="vgroup${tally[u] === max ? ' vtop' : ''}">${inner}</div>`;
   }).join('');
   if(votes){
     const abst = Object.keys(votes).filter(v => votes[v] === 'abstain').map(nameOf).sort();
@@ -2395,11 +2440,15 @@ function recapHTML(){
       if(!e.deaths?.length) lines.push('Nobody died.');
       return `<h3>Night ${e.n}</h3>` + lines.map(l => `<p>${l}</p>`).join('');
     }
-    const votes = Object.entries(e.votes || {});
+    // Votes grouped by who received them, most first: "Fitz (3: Mike, Marta, Ben)".
+    const by = {}, abst = [];
+    for(const [v, c] of Object.entries(e.votes || {})) (c === 'abstain' ? abst : (by[c] = by[c] || [])).push(v);
+    const votes = Object.entries(by).sort((a, b) => b[1].length - a[1].length || nameOf(a[0]).localeCompare(nameOf(b[0])));
     const RR = u => { const r = game.revealed?.[u]; return r ? (r === 'werewolf' ? 'a Werewolf' : r === 'villager' ? 'a Villager' : 'the ' + roleName(r)) : 'role unknown'; };
     const res = e.runoff ? `Tie between ${e.runoff.map(N).join(' and ')}, so a runoff.` : e.eliminated ? `<b>${N(e.eliminated)}</b> (${RR(e.eliminated)}) was hanged by the village.` : 'No one was hanged.';
     return `<h3>Day ${e.n}${e.round === 2 ? ', runoff' : ''}</h3>` +
-      (votes.length ? votes.map(([v, c]) => `<p>${N(v)} \u2192 ${c === 'abstain' ? 'abstained' : N(c)}</p>`).join('') : '<p class="note">Nobody voted.</p>') + `<p>${res}</p>`;
+      (votes.length ? votes.map(([c, vs]) => `<p><b>${N(c)}</b> (${vs.length}: ${vs.map(N).sort().join(', ')})</p>`).join('') : '<p class="note">Nobody voted for anyone.</p>') +
+      (abst.length ? `<p class="note">Abstained: ${abst.map(N).sort().join(', ')}</p>` : '') + `<p>${res}</p>`;
   });
   return `<div class="recap"><h2>How it happened</h2>${settingsOf(game).votes === 'anonymous' ? '<p class="note">Votes were anonymous during the game. Here is how everyone voted.</p>' : ''}${parts.join('')}</div>`;
 }
@@ -2446,7 +2495,7 @@ function crierDetail(ph){
   // The vote is secret until the decision; then the verdict shows who voted for whom (or counts, if anonymous).
   const grouped = h => h.replace(/(<div class="vgroup[\s\S]*<\/div>)/, '<div class="vgroups">$1</div>');
   if(ph.name === 'vote'){
-    if(now() < (ph.showUntil || 0)) return grouped(runoffPreview(ph));
+    if(ph.round === 2 && ph.prev) return `<p class="hint">Runoff between ${esc(nameList(ph.candidates.map(nameOf)))}: ${al.filter(u => ph.votes?.[u]).length} of ${al.length} have voted.</p>` + grouped(runoffBoard(ph, []));
     const cnt = al.filter(u => ph.votes?.[u]).length;
     return `<p class="hint">${ph.round === 2 ? 'Runoff: ' + esc(nameList(ph.candidates.map(nameOf))) + '. ' : ''}${cnt} of ${al.length} have voted. The votes are revealed when the vote closes.</p>`;
   }
@@ -2735,6 +2784,12 @@ document.addEventListener('click', async e => {
         for(let i = 0; i < need && i < free.length && uids().length + i < cap; i++)
           up[`players.bot_${Math.random().toString(36).slice(2, 9)}`] = { name: free[i], alive:true, bot:true, joinedAt: now() + i };
         if(Object.keys(up).length) return upd(up); return;
+      }
+      case 'kick': {
+        if(!isHost() || game.status !== 'lobby' || !u || u === myUid || !players()[u]) return;
+        if(!players()[u].bot && !confirm(`Remove ${nameOf(u)} from the game?`)) return;
+        // A kicked person is sent back to the home screen (they can rejoin with the code).
+        return upd({ [`players.${u}`]: null, ...(players()[u].bot ? {} : { [`kicked.${u}`]: now() }) });
       }
       case 'removebot': { const b = uids().filter(x => players()[x].bot).pop(); if(b) return upd({ [`players.${b}`]: null }); return; }
       case 'delgame': return deleteGame(el.dataset.code);
