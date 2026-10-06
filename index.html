@@ -93,6 +93,8 @@ label.f{display:flex;justify-content:space-between;align-items:center;gap:12px;p
 label.f select{max-width:58%}
 fieldset{border:1px solid var(--line);border-radius:12px;padding:6px 14px 10px;margin:14px 0}
 legend{padding:0 6px;font-family:var(--serif);font-size:18px}
+.gset{margin:10px 0}
+.gset-h{font-family:var(--serif);font-size:17px;margin:10px 0 2px;color:var(--ember)}
 .xfade{position:relative;width:fit-content;margin:0 auto}
 /* The hanging reveal (owner: slow and blurry): the disguise blurs away while the true face sharpens through it. */
 /* Only the faces blur; the frame and name stay crisp. */
@@ -104,6 +106,7 @@ legend{padding:0 6px;font-family:var(--serif);font-size:18px}
 @keyframes xfSharp{0%{filter:blur(12px)}55%{filter:blur(6px)}100%{filter:blur(0)}}
 .xfade.same>.med .med-c img{animation:xfPulse 3.4s ease-in-out .3s both}
 @keyframes xfPulse{0%{filter:blur(0)}45%{filter:blur(10px)}100%{filter:blur(0)}}
+.xf-wait{opacity:0}
 .xf-in{opacity:0;animation:xfIn .9s ease 3.6s forwards}   /* after the face has changed, with the narrator's line (REVEAL_FACE_MS) */
 @keyframes xfIn{to{opacity:1}}
 .forge{width:min(84vw,56vh);margin:0 auto}
@@ -297,6 +300,7 @@ body.crier .risename{font-size:5.5vh}
 <section id="game" class="hidden">
 <div class="top"><span id="ph-label"></span><span class="timer" id="clock"></span></div>
 <div id="hostbar" class="hostbar"></div>
+<div id="gamesettings"></div>
 <p class="narr" id="narr" aria-live="polite"></p>
 <button class="role" id="rolecard" data-act="role" aria-expanded="false"><span class="seal" id="seal">?</span><span><b id="role-name">Tap to view role</b><small id="role-text"></small></span><span class="rstat" id="role-stat"></span></button>
 <div id="deal"></div>
@@ -1077,7 +1081,7 @@ async function startGame(){
   // Roles are already dealt in secret; the deck is the show. The cards appear 2 s after Start,
   // and Night 1 begins when the host presses Start the game once every card is drawn.
   const t = now();
-  const up = { status:'playing', revealed:{}, revealedArt:{}, alter, lastNight:null, result:null, foolWon:null, startedAt: t, gameNo: (game.gameNo || 0) + 1,
+  const up = { status:'playing', revealed:{}, revealedArt:{}, alter, hanged:{}, lastNight:null, result:null, foolWon:null, startedAt: t, gameNo: (game.gameNo || 0) + 1,
     phase: { name:'deal', n:0, startedAt:t, showAt: t + 2000, cards: list.length, picks:{}, say: mkSay([{ at: t + 2500, t: draw('deal') }]) } };
   for(const u of list) up[`players.${u}.alive`] = true;
   await upd(up);
@@ -1343,7 +1347,7 @@ async function stepVote(ph, t){
   if(ni >= 0){ const forge = t + scriptMs(items.slice(0, ni)); items[ni].at = forge + FORGE.lead;
     up.phase.forgeAt = forge; up.phase.newsAt = forge + FORGE.ms; up.phase.newsUntil = t + scriptMs(items) + lead + 1500; }
   up.phase.say = mkSay(items); up.phase.endsAt = t + Math.max(d.verdict * 1000, 10000, scriptMs(items) + lead + 2500);
-  if(eliminated) up[`players.${eliminated}.alive`] = false;
+  if(eliminated){ up[`players.${eliminated}.alive`] = false; up[`hanged.${eliminated}`] = true; }   // the hanged don't bleed
   await upd(up);
 }
 const teamOf = r => r === 'werewolf' ? 'wolves' : r === 'fool' ? 'fool' : 'village';
@@ -2002,6 +2006,20 @@ function renderReveal(){
   }
   if(!key || revealDone.has(key)){ if(revealKey){ revealKey = null; el.classList.add('hidden'); el.innerHTML = ''; } return; }
   if(revealKey === key) return;
+  // The hanging reveal changes the card already on screen (no rebuild, so the frame never moves): the true face
+  // goes in under the disguise, the disguise blurs away on top, and the role fills its reserved line.
+  const it0 = items[0], xf = el.querySelector('.xfade');
+  if(it0?.disguise && it0.shown && revealKey === key.replace(/-r$/, '') && xf){
+    revealKey = key;
+    const art = revealedArt(it0.u), r = game.revealed?.[it0.u], same = it0.disguise === art;
+    const med = a => medallion(it0.u, { size: xf.dataset.size, art: a, rim:'red', name: nameOf(it0.u), inner: a ? '' : nameOf(it0.u), bg:'#2a1416' });
+    if(!same){ const top = document.createElement('div'); top.className = 'xf-top'; while(xf.firstChild) top.appendChild(xf.firstChild); xf.innerHTML = med(art); xf.appendChild(top); }
+    xf.classList.add(same ? 'same' : 'diff');
+    const line = el.querySelector('.reveal-line'); if(line) line.textContent = it0.line;
+    const role = el.querySelector('.reveal-role'); if(role && r){ role.textContent = r === 'werewolf' ? 'A Werewolf' : r === 'villager' ? 'A Villager' : 'The ' + roleName(r); role.classList.remove('xf-wait'); role.classList.add('xf-in'); }
+    if(crier) setTimeout(() => { revealDone.add(key); renderReveal(); }, 9000);
+    return;
+  }
   revealKey = key;
   const two = items.length > 1, size = two ? 'min(40vw,30vh)' : 'min(62vw,42vh)';
   el.innerHTML = `<div class="reveal-row">${items.map(it => {
@@ -2011,8 +2029,8 @@ function renderReveal(){
         <div class="reveal-line">${esc(it.line.replace(/^In other news, /, '').replace(/^./, c => c.toUpperCase()))}</div></div>`; }
     const med = a => medallion(it.u, { size, art: a, rim:'red', name: nameOf(it.u), inner: a ? '' : nameOf(it.u), bg:'#2a1416' });
     const roleText = r => `${r === 'werewolf' ? 'A Werewolf' : (r === 'villager' ? 'A Villager' : 'The ' + roleName(r))}`;
-    if(it.disguise && !it.shown)                                     // before the role is told: a plain villager, no role
-      return `<div class="reveal-item">${med(it.disguise)}<div class="reveal-line">${esc(it.line)}</div></div>`;
+    if(it.disguise && !it.shown)                                     // before the role is told: their alter ego, no role (line reserved)
+      return `<div class="reveal-item"><div class="xfade" data-size="${size}">${med(it.disguise)}</div><div class="reveal-line">${esc(it.line)}</div><div class="reveal-role xf-wait">&nbsp;</div></div>`;
     const art = revealedArt(it.u), r = game.revealed?.[it.u];
     if(it.disguise)                                                  // the moment it's told: the true face shows through, the role fades in
       // A plain Villager keeps the same face: it blurs as if about to change, then comes back into focus.
@@ -2076,11 +2094,25 @@ function figure(art, view, x, y, o = {}){
   } else {
     body = `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})${o.flip ? ' scale(-1 1)' : ''}"><image href="${a.src}" x="${(-w / 2).toFixed(1)}" y="${(-h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" filter="url(#fg-${g})"/></g>`;
   }
-  const blood = o.blood ? `<ellipse cx="${x + shadowW * 0.03}" cy="${y}" rx="${shadowW * 0.36}" ry="${shadowW * 0.07}" fill="#46060a" opacity=".7" filter="url(#fg-soft)"/>` : '';
-  return blood + `<ellipse cx="${x}" cy="${y}" rx="${shadowW * 0.46}" ry="${shadowW * 0.06}" fill="#05060f" opacity=".5" filter="url(#fg-soft)"/>` + body;
+  if(o.fallen){
+    // A body lies flat, so its footprint is the whole body (centred hh/2 above the baseline). A soft contact
+    // shadow under all of it grounds it; a night victim also lies in an uneven pool of blood (overlapping blobs,
+    // the same on every screen) that is bigger than the body, so the blood borders it (owner, 2026-10-06).
+    const hh = w * (dead ? 0.6 : 0.78), cx = x, cy = y - hh / 2, L = h / 2;
+    let seed = Math.round(x * 7 + y * 13) || 1; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    let pool = '';
+    if(o.blood){
+      for(let i = 0; i < 7; i++) pool += `<ellipse cx="${(cx + (r() - .5) * L * .9).toFixed(1)}" cy="${(cy + hh * .12 + (r() - .5) * hh * .6).toFixed(1)}" rx="${(L * (.45 + r() * .3)).toFixed(1)}" ry="${(hh * (.45 + r() * .3)).toFixed(1)}" transform="rotate(${((r() - .5) * 16).toFixed(1)} ${cx.toFixed(1)} ${cy.toFixed(1)})"/>`;
+      for(let i = 0; i < 4; i++){ const a = r() * Math.PI * 2; pool += `<circle cx="${(cx + Math.cos(a) * L * (1 + r() * .25)).toFixed(1)}" cy="${(cy + Math.sin(a) * hh * (1 + r() * .3)).toFixed(1)}" r="${(hh * (.08 + r() * .1)).toFixed(1)}"/>`; }
+      pool = `<g fill="#4a0508" opacity=".82" filter="url(#fg-pool)">${pool}</g>`;
+    }
+    return pool + `<ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="${(L * .98).toFixed(1)}" ry="${(hh * .62).toFixed(1)}" fill="#05060f" opacity=".55" filter="url(#fg-soft)"/>` + body;
+  }
+  return `<ellipse cx="${x}" cy="${y}" rx="${shadowW * 0.46}" ry="${shadowW * 0.06}" fill="#05060f" opacity=".5" filter="url(#fg-soft)"/>` + body;
 }
 const FIG_DEFS = `<defs>
   <filter id="fg-soft" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="3.5"/></filter>
+  <filter id="fg-pool" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="1.6"/></filter>
   <filter id="fg-dawn"><feColorMatrix type="matrix" values=".78 0 0 0 0  0 .8 0 0 0  0 0 .86 0 0  0 0 0 1 0"/></filter>
   <filter id="fg-dawn-dead"><feColorMatrix type="matrix" values=".6 0 0 0 0  0 .6 0 0 0  0 0 .66 0 0  0 0 0 1 0"/></filter>
   <filter id="fg-night"><feColorMatrix type="matrix" values=".82 0 0 0 0  0 .77 0 0 0  0 0 .78 0 0  0 0 0 1 0"/></filter>
@@ -2091,7 +2123,7 @@ const FIG_DEFS = `<defs>
 </defs>`;
 // A hanged player whose role hasn't been told yet lies in the square as their disguise (a plain villager).
 function artFor(u){ const ph = game.phase;
-  return revealedArt(u) || (game.revealed?.[u] === 'werewolf' ? 'wolf' : game.revealed?.[u]) || (ph?.disguise && ph.eliminated === u ? ph.disguise : 'villager1'); }
+  return revealedArt(u) || (game.revealed?.[u] === 'werewolf' ? 'wolf' : game.revealed?.[u]) || (ph?.disguise && ph.eliminated === u ? ph.disguise : game.alter?.[u] || 'villager1'); }
 function sceneFigures(){
   const w = game.result?.winner, list = uids(), role = u => game.revealed?.[u];
   const items = []; const used = {};
@@ -2106,7 +2138,7 @@ function sceneFigures(){
   standing.slice(0, ss.length).forEach((u, i) => { const art = artFor(u);
     items.push({ y: ss[i][1], m: figure(art, 'front', ss[i][0], ss[i][1], { grade:g, scale: art === 'wolf' ? 1.4 : 1, flip: flipFor(art) }) }); });
   fallen.slice(0, SLOTS.fall.length).forEach((u, i) => { const art = artFor(u); const [x, y] = SLOTS.fall[i];
-    items.push({ y, m: figure(art, 'side', x, y, { grade:g, fallen:true, ...deadPose(u), scale: art === 'wolf' ? 1.25 : 1, blood: role(u) !== 'werewolf' && role(u) !== 'fool' && i % 3 !== 1 }) }); });
+    items.push({ y, m: figure(art, 'side', x, y, { grade:g, fallen:true, ...deadPose(u), scale: art === 'wolf' ? 1.25 : 1, blood: !game.hanged?.[u] }) }); });
   if(w === 'fool'){ const f = list.find(u => role(u) === 'fool'); const [x, y] = SLOTS.foolStand[0];
     // The Fool's win ends the game at the gallows: show them grinning over the square.
     if(f) items.push({ y: y + 40, m: figure('fool', 'front', x, y + 40, { grade:'dawn', scale:1.2 }) }); }
@@ -2115,20 +2147,26 @@ function sceneFigures(){
 // During dawn, the day and the vote: last night's dead lie by the well, their medallions top and centre.
 function nightDeadFigures(){
   const ph = game.phase, ln = game.lastNight;
-  if(!ph || !ln || ln.n !== ph.n || !['dawn','day','vote'].includes(ph.name)) return null;
-  const g = ph.name === 'dawn' ? 'dawn' : 'day';
-  const svg = (ln.deaths || []).slice(0, 3).map((u, i) => { const [x, y] = SLOTS.fall[i]; const art = revealedArt(u);
-    return { y, m: figure(art || 'villager1', 'side', x, y, { grade:g, fallen:true, ...deadPose(u), shade: !art, blood: !!art }) }; })
-    .sort((a, b) => a.y - b.y).map(i => i.m).join('');
-  return { svg, meds: (ln.deaths || []).map(u => medallion(u, { size:'60px', art: revealedArt(u), rim:'red', name: nameOf(u), inner: revealedArt(u) ? '' : '\u2020', bg:'#2a1416' })).join('') };
+  if(!ph || !['dawn','day','vote','verdict'].includes(ph.name)) return null;
+  const g = ph.name === 'dawn' ? 'dawn' : 'day', night = ln && ln.n === ph.n ? (ln.deaths || []).slice(0, 3) : [];
+  // Last night's dead lie in the square from dawn through the verdict (night victims bleed). At the verdict the
+  // hanged player lies there too, in their alter ego until the role is told (artFor), without blood.
+  const items = night.map((u, i) => { const [x, y] = SLOTS.fall[i]; const art = revealedArt(u);
+    return { y, m: figure(art || game.alter?.[u] || 'villager1', 'side', x, y, { grade:g, fallen:true, ...deadPose(u), shade: !art && !game.alter?.[u], blood: true }) }; });
+  if(ph.name === 'verdict' && ph.eliminated){ const [x, y] = SLOTS.fall[night.length], art = artFor(ph.eliminated);
+    items.push({ y, m: figure(art, 'side', x, y, { grade:g, fallen:true, ...deadPose(ph.eliminated), scale: art === 'wolf' ? 1.25 : 1 }) }); }
+  if(!items.length) return null;
+  const svg = items.sort((a, b) => a.y - b.y).map(i => i.m).join('');
+  return { svg, meds: night.map(u => medallion(u, { size:'60px', art: revealedArt(u), rim:'red', name: nameOf(u), inner: revealedArt(u) ? '' : '\u2020', bg:'#2a1416' })).join('') };
 }
-// During the day and the vote, everyone still alive stands in the square in their alter ego (game.alter).
+// From dawn (as the circle opens on the village) through the verdict, everyone still alive stands in the
+// square in their alter ego (game.alter), around the dead. The hanged player leaves the crowd at the verdict.
 function villageCrowd(){
-  const ph = game.phase; if(!ph || !['day', 'vote'].includes(ph.name) || !game.alter) return '';
+  const ph = game.phase; if(!ph || !['dawn', 'day', 'vote', 'verdict'].includes(ph.name) || !game.alter) return '';
   const used = {};
   return uids().filter(isAlive).slice(0, SLOTS.villageStand.length).map((u, i) => { const art = game.alter[u] || 'villager1', [x, y] = SLOTS.villageStand[i];
     used[art] = (used[art] || 0) + 1;
-    return { y, m: figure(art, 'front', x, y, { grade:'day', flip: used[art] % 2 === 0 }) }; })
+    return { y, m: figure(art, 'front', x, y, { grade: ph.name === 'dawn' ? 'dawn' : 'day', flip: used[art] % 2 === 0 }) }; })
     .sort((a, b) => a.y - b.y).map(f => f.m).join('');
 }
 function sceneSVG(viewBox, withBg){
@@ -2367,6 +2405,36 @@ function narrFor(ph){
   }
   return '';
 }
+// ---- In-game settings (host): timers and rules that can safely change mid-game, from the next phase. ----
+// Roles, the number of wolves and the game size are fixed once the cards are dealt, so they're shown locked.
+const IN_GAME_SETTINGS = ['speak','discussion','night','voteTime','dayMode','rounds','votes','reveal','parity','parityTimer','foolWin'];
+let gameSetOpen = false;
+function gameSettingsHTML(){
+  const s = settingsOf(game);
+  const sel = (key, opts, label) => `<label class="f">${label}<select data-set="${key}">${opts.map(([v, t]) =>
+    `<option value="${v}" ${String(s[key]) === String(v) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`;
+  const onRoles = [s.wolves === 'auto' ? 'wolves: auto' : `${s.wolves} wol${+s.wolves === 1 ? 'f' : 'ves'}`,
+    ...[['seer','Seer'],['witch','Witch'],['doctor','Doctor'],['fool','Fool']].filter(([k]) => s[k]).map(([, n]) => n)].join(', ');
+  return `<div class="card gset"><h3 style="margin:0 0 4px">Settings</h3><p class="note" style="margin-top:0">Changes apply from the next phase; a running clock isn't changed.</p>
+    <div class="gset-h">Timers</div>
+    ${sel('night', [[45,'45 s'],[60,'60 s'],[90,'90 s'],[120,'2 min']], 'Night length')}
+    ${sel('speak', [[15,'15 s'],[20,'20 s'],[30,'30 s'],[45,'45 s']], 'Speaking time')}
+    ${sel('discussion', [[120,'2 min'],[180,'3 min'],[300,'5 min'],[420,'7 min']], 'Open discussion time')}
+    ${sel('voteTime', [[30,'30 s'],[45,'45 s'],[60,'60 s'],[90,'90 s']], 'Voting time')}
+    <div class="gset-h">Day</div>
+    ${sel('dayMode', [['structured','Structured'],['open','Open']], 'Discussion')}
+    ${sel('rounds', [[1,'1'],[2,'2'],[3,'3'],[4,'4']], 'Accusation rounds')}
+    <div class="gset-h">Votes and the dead</div>
+    ${sel('votes', [['public','Public'],['anonymous','Anonymous']], 'Votes')}
+    ${sel('reveal', [['true','Reveal'],['false','Keep hidden']], 'Role of the eliminated')}
+    <p class="note" style="margin:2px 0 6px">Anyone already revealed stays revealed.</p>
+    <div class="gset-h">Endgame</div>
+    ${sel('parity', [['smart','Smart'],['always','Always'],['never','Never']], 'End when wolves equal villagers')}
+    ${sel('parityTimer', [['short','Halved'],['normal','Normal'],['sudden','15 seconds']], 'Wolf timer at parity')}
+    ${s.fool ? sel('foolWin', [['continue','Game continues'],['end','Game ends']], 'When the Fool is hanged') : ''}
+    <p class="note">Locked for this game: the roles (${esc(onRoles)}) and the game size.</p>
+    <div class="row"><button class="btn small" data-act="gset">Close</button></div></div>`;
+}
 function renderGame(){
   const ph = game.phase || {}, s = settingsOf(game), host = isHost();
   $('ph-label').textContent = phaseLabel(ph);
@@ -2405,8 +2473,9 @@ function renderGame(){
   // Host bar
   const away = !host && game.status === 'playing' && game.hostBeat && now() - game.hostBeat > 20000;
   setHTML('hostbar', host && game.status === 'playing'
-    ? `${s.test.on ? `<button class="btn small" data-act="back" ${backStack.length ? '' : 'disabled'}>Back</button>` : ''}${ph.name === 'deal' ? (s.test.on && !allDrawn(ph) ? '<button class="btn small" data-act="skip">Skip ahead</button>' : '') : `<button class="btn small" data-act="pause">${ph.pausedAt ? 'Resume' : 'Pause'}</button><button class="btn small" data-act="skip" ${ph.pausedAt ? 'disabled' : ''}>Skip ahead</button>`}<button class="btn small blood" data-act="endgame">End game</button>`
+    ? `<button class="btn small${gameSetOpen ? ' pri' : ''}" data-act="gset">Settings</button>${s.test.on ? `<button class="btn small" data-act="back" ${backStack.length ? '' : 'disabled'}>Back</button>` : ''}${ph.name === 'deal' ? (s.test.on && !allDrawn(ph) ? '<button class="btn small" data-act="skip">Skip ahead</button>' : '') : `<button class="btn small" data-act="pause">${ph.pausedAt ? 'Resume' : 'Pause'}</button><button class="btn small" data-act="skip" ${ph.pausedAt ? 'disabled' : ''}>Skip ahead</button>`}<button class="btn small blood" data-act="endgame">End game</button>`
     : away ? `<button class="btn small pri" data-act="takehost">The host seems to be away. Take over as host</button>` : '');
+  setHTML('gamesettings', host && game.status === 'playing' && gameSetOpen ? gameSettingsHTML() : '');
   // All-seeing view (Test mode, host only)
   if(host && s.test.on && s.test.allSeeing && game.status === 'playing'){
     const n = ph.n;
@@ -2767,6 +2836,7 @@ document.addEventListener('click', async e => {
       case 'crier-leave': return leaveCrier();
       case 'snd-open': soundOpen = true; return renderSoundUI();
       case 'snd-close': soundOpen = false; return renderSoundUI();
+      case 'gset': gameSetOpen = !gameSetOpen; return render();
       case 'sec': { const k = el.dataset.sec; lobbyOpen.has(k) ? lobbyOpen.delete(k) : lobbyOpen.add(k); return renderLobby(); }
       case 'snd-unlock': await audio()?.resume(); return render();
       case 'snd-test': testChime(); soundCaption('Test chime'); return;
@@ -2843,6 +2913,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const el = e.target.closest('[data-set]'); if(!el || !isHost()) return;
+  if(game.status === 'playing' && !IN_GAME_SETTINGS.includes(el.dataset.set)) return;   // roles etc. are locked once dealt
   let v = el.value; if(v === 'true') v = true; else if(v === 'false') v = false; else if(/^\d+$/.test(v)) v = +v;
   upd({ [`settings.${el.dataset.set}`]: v });
 });
