@@ -25,6 +25,13 @@ Events (Sound panel: "Event sounds")
   trapdoor.mp3        Hangman's trapdoor dropping. 1.5 seconds after someone is voted to hang.
   village-win.mp3     The village wins.
   fool-win.mp3        The Town Fool wins (also when the Fool is hanged and the game goes on).
+  no-death.mp3        Relief: a small crowd, "oh thank goodness" and so on, overlapping. At dawn when nobody
+                      died, right after the narrator says so. 5 seconds at most.
+  news-notify.mp3     A short cheerful jingle before "In other news…" after the verdict. 2 seconds at most.
+
+Nothing ever plays on top of anything else: the narrator waits for sounds to finish, and random
+night sounds fade out quickly when something planned happens. Keep files trimmed tight, because
+a long silent tail makes the next line wait.
 
 To add variety later, a slot can list several files and one is picked at random:
 see the SOUNDS list near the top of the script in index.html.

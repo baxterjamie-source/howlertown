@@ -320,6 +320,8 @@ const SOUNDS = {
   trapdoor:    { cat:'event',   label:'Trapdoor drop',    files:['trapdoor.mp3'] },
   villageWin:  { cat:'event',   label:'Village wins',     files:['village-win.mp3'] },
   foolWin:     { cat:'event',   label:'Town Fool wins',   files:['fool-win.mp3'] },
+  noDeath:     { cat:'event',   label:'Relief (no one died)', files:['no-death.mp3'] },
+  newsNotify:  { cat:'event',   label:'News jingle',      files:['news-notify.mp3'] },
 };
 // Each device keeps its own switches and volume (the Crier's matter most).
 const soundPrefs = (() => { try{ return { ambient:true, event:true, narrator:true, volume:.8, ...JSON.parse(localStorage.getItem('howlertown_sound') || '{}') }; }
@@ -359,7 +361,17 @@ async function playSound(slot, o = {}){
   const src = c.createBufferSource(), g = c.createGain();
   src.buffer = buf; src.loop = !!s.loop; g.gain.value = (s.vol || 1) * (o.vol || 1);
   src.connect(g); g.connect(master); src.start();
-  return { src, g };
+  const h = { src, g };
+  // Random ambience gives way to planned moments; everything else keeps speech waiting until it ends.
+  if(o.random){ randomNow.add(h); src.onended = () => randomNow.delete(h); }
+  else if(!s.loop) busyUntil = Math.max(busyUntil, now() + buf.duration * 1000);
+  return h;
+}
+const randomNow = new Set(); let busyUntil = 0;
+function fadeAmbient(){
+  if(!actx) return;
+  for(const h of randomNow){ try{ h.g.gain.setTargetAtTime(0, actx.currentTime, .12); h.src.stop(actx.currentTime + .6); }catch{} }
+  randomNow.clear();
 }
 async function startLoop(slot){ if(loops[slot]) return; loops[slot] = 'starting'; const h = await playSound(slot); if(loops[slot] === 'starting') loops[slot] = h || 'silent'; else h?.src.stop(); }
 function stopLoop(slot){ const h = loops[slot]; delete loops[slot]; if(h && h.src) try{ h.src.stop(); }catch{} }
@@ -374,27 +386,19 @@ function soundWatch(){
   const first = soundKey === undefined; soundKey = key;
   soundTimers.forEach(clearTimeout); soundTimers = [];
   if(!(game?.status === 'playing' && ph.name === 'day')) stopLoop('murmur');
-  if(first || !game || !isSoundDevice()) return;
-  if(game.status === 'ended'){ const w = game.result?.winner;
-    if(w === 'wolves') playSound('howlLoud'); else if(w === 'village') playSound('villageWin'); else if(w === 'fool') playSound('foolWin');
-    return; }
-  if(game.status !== 'playing') return;
-  // The loud howl lands with the wolf's howl in the nightfall animation; the death sound waits for the dawn one.
+  fadeAmbient();                                                  // a new moment: random ambience gives way
+  if(first || !game || !isSoundDevice() || game.status !== 'playing') return;
+  // Sounds tied to the animations stay here, on the animation's clock. Everything else (the bell, gavel,
+  // trapdoor, death sound, wins…) is in the phase's script (say), in order with the narrator.
   const since = ph.introAt ? now() - ph.introAt : 0;
-  if(ph.name === 'night') later(Math.max(0, introHowlAt(ph) - since), () => playSound('cardHowl'));     // the single howl, with the portrait
-  // Dawn: the wolf growls as the animation opens, the rooster crows once the screen is fully black
-  // (before the circle opens), and the death sound waits until the circle is fully open.
+  if(ph.name === 'night') later(Math.max(0, introHowlAt(ph) - since), () => { fadeAmbient(); playSound('cardHowl'); });   // with the howling portrait
+  // Dawn: the wolf growls as the animation opens; the rooster crows once the screen is fully black.
   if(ph.name === 'dawn' && ph.intro){
     if(since < 1500) playSound('snarl');
     const blackDone = introSeqMs((ph.intro.faces || []).length) - DAWN.skip + DAWN.blackAt + DAWN.black;
-    if(since < blackDone + 500) later(Math.max(0, blackDone - since), () => playSound('rooster'));
+    if(since < blackDone + 500) later(Math.max(0, blackDone - since), () => { fadeAmbient(); playSound('rooster'); });
   }
-  if(ph.name === 'dawn' && ph.deaths?.length) later(Math.max(0, (ph.intro?.ms || 0) - since), () => playSound('deathReveal'));
   if(ph.name === 'day') startLoop('murmur');
-  if(ph.name === 'vote' && ph.round !== 2) playSound('bell');
-  if(ph.name === 'verdict'){ playSound('gavel');
-    if(ph.eliminated){ later(1500, () => playSound('trapdoor'));
-      if(game.foolWon === ph.eliminated) later(3500, () => playSound('foolWin')); } }
 }
 // The wolves' attack plays at the moment the host chose (phase.attackAt), on the sound device only.
 let attackKey = null, attackTimer = null;
@@ -403,112 +407,227 @@ function attackWatch(){
   if(!(game?.status === 'playing' && ph?.name === 'night' && at)){ clearTimeout(attackTimer); attackKey = null; return; }
   const key = `${game.gameNo}-${ph.n}-${at}`; if(attackKey === key) return; attackKey = key;
   clearTimeout(attackTimer);
-  if(now() < at + 1500) attackTimer = setTimeout(() => playSound('wolfAttack'), Math.max(0, at - now()));
+  if(now() < at + 1500) attackTimer = setTimeout(() => { fadeAmbient(); playSound('wolfAttack'); }, Math.max(0, at - now()));
 }
 // ---- The narrator: the device's built-in voice, on the sound device only. ------------------------
-// Screens keep their short lines (NARR); the voice tells it longer, like a storyteller by the fire.
-const SPEAK = {
-  deal: ['Gather close, all of you. Fate is dealing the cards tonight. Draw one each. Look upon it. And tell no living soul what you saw.',
-         'The cards are on the table, and every one of them hides a secret. Choose yours, and guard it with your life. It may come to that.'],
-  dealDone: ['Every card is drawn. Somewhere among you, a wolf is smiling. When the host is ready, the night begins.',
-             'The cards are dealt, the secrets are kept. Look around you. Remember these faces. Some of them will not see the morning.'],
-  night1: ['Night falls on Howlertown for the very first time. The shutters close. The candles die. And out past the well, something opens its yellow eyes.',
-           'The sun slips behind the hills, and Howlertown goes to bed. Sleep well, villagers. Not all of you will wake.'],
-  night: ['Night falls again on Howlertown. {count} souls lie awake behind barred doors. One of them is not afraid of the dark.',
-          'Darkness returns to Howlertown. The wind is rising, and the pack is hungry again.',
-          'Another night. Fewer candles burn in the windows now. Close your eyes, if you dare.'],
-  parity: ['The wolves can smell victory. Their time is very near.'],
-  dawnNone: ['Dawn creeps over the rooftops, and every door swings open. Every villager is alive. Whether by luck or by magic, the wolves went hungry.',
-             'The rooster crows, the mist lifts, and not a soul is missing. Do not grow comfortable, Howlertown.'],
-  dawnOne: ['Dawn breaks over Howlertown, but not for {names}. They were found by the well at first light, cold as the stones.',
-            'A scream rings out across the square. The wolves came calling in the night, and poor {names} answered the door.',
-            'The village wakes to an empty chair. {names} will not be joining the debate today. Or ever again.'],
-  dawnMany: ['Dawn breaks, grey and cruel. The night has taken {names}. The village counts its dead, and then counts its suspects.',
-             'What a night. {names} lie still in the square. The wolves were busy, or perhaps they had help.'],
-  dayStructured: ['The village gathers in the square, and every eye is narrowed. One of you is lying. Who will be the first to point a finger?',
-                  'Day {n} in Howlertown. The square is full, and the wolves are hiding in plain sight. Make your accusations.'],
-  dayOpen: ['The village gathers in the square. Talk, argue, plead. But choose carefully. The wolves are listening, and they are nodding along.',
-            'Day {n} in Howlertown. Speak your suspicions out loud. Somewhere in this crowd, a wolf is practising an innocent face.'],
-  accuser: ['{accuser} rises, and points a trembling finger at {accused}. Speak, {accuser}. Tell the village why.',
-            'Hush now. {accuser} accuses {accused}. Let us hear the case.',
-            'The crowd parts. {accuser} has a name, and the name is {accused}. Go on, {accuser}.'],
-  accused: ['{accused}, the rope is waiting. Defend yourself, if you can.',
-            'Now, {accused}. The village is watching. Make them believe you.',
-            'Your turn, {accused}. Choose your words carefully. They may be your last.'],
-  vote: ['Enough talk. The bell tolls for a decision. Cast your votes, and may you choose better than the wolves would like.',
-         'The time for words is over. Point to the one you fear the most. Vote.'],
-  runoff: ['The village is split down the middle. Only {names} remain on trial. Vote again, and this time, make it count.'],
-  elim: ['The village has spoken. {name} is marched to the gallows, and the crowd falls silent.',
-         'So be it. {name} climbs the gallows steps, one slow step at a time.',
-         'The votes are counted. {name}, the village has chosen you. May the rope be quick.'],
-  secret: ['Their secret goes with them into the ground.'],
-  fool: ['But listen. Is that laughter? The Fool wanted the rope all along.'],
-  noneTie: ['The village cannot agree. No one hangs today, and somewhere, a wolf is grateful.'],
-  noneVotes: ['Silence in the square. Nobody dares to vote. No one hangs today, and the night will come all the same.'],
-  wolves: ['The last candle gutters out. The howling never stops now. Howlertown belongs to the wolves.',
-           'One by one, the villagers fell, and now the wolves walk the square in daylight. The wolves win.'],
-  village: ['The last wolf lies still. For the first time in a long while, Howlertown will sleep through the night. The village wins!',
-            'The pack is broken, the forest is quiet, and the doors of Howlertown can open again. The village wins!'],
-  foolEnd: ['The Fool wins! Up the gallows with a grin from ear to ear. Who is the fool now, Howlertown?'],
+// Minimal lines that carry the game, chosen with the owner (2026-10-06). Whoever starts a moment (nearly
+// always the host) picks its lines and publishes a script with the phase: say = { id, items:[…] }, where
+// an item is { t:'words' } speech (v:'news' for the newsreader voice), { snd:'slot' } a sound, or { gap:ms }
+// silence, any of them with at: (wall clock, "not before"). The sound device plays a script one thing at
+// a time; the picker uses the script's estimated length to hold that moment's clock, so nobody loses time.
+// In lines: {name} {names} {accuser} {accused}; {w:one|many} follows the publicly known number of wolves
+// (never a hint at the real count) and {d:one|many} the number of deaths. ~word~ is spoken very slowly,
+// _word_ slowly, and "…" is a pause.
+const VOICE = {
+  deal: ['Fate deals the roles. Choose and tell no one.'],
+  dealDone: ['All have chosen. {w:A wolf is|Wolves are} among you.', 'The roles are dealt. Night is coming.'],
+  // Spoken during the nightfall animation, so each must end before the wolf howls.
+  night: ['Your neighbours may not be who they seem…', 'The full ~moon~… _transforms, human, flesh_…',
+    'Neighbours by day… perhaps wolves by night.', 'Someone you trust is growing fur.', 'Under the moon, {w:a friend becomes a beast|friends become beasts}.',
+    'Not every face in Howlertown is always human.', 'The moon is up… and so is someone’s appetite.', 'A familiar voice… now a growl.',
+    'Somewhere a neighbour’s bones begin to crack.', 'Lock your door… though it may not help.', 'The moon calls… and someone answers.',
+    'Kind eyes by day… yellow eyes by night.', 'A neighbour slips out… on four legs.', 'Bloody teeth replace familiar smiles.'],
+  // Spoken during the dawn animation (wolf back to human), between the growl and the rooster.
+  dawnAnim: ['The sun is rising… and evil transforms back to friendly.', 'Daylight comes… and {w:the beast hides behind a smile|the beasts hide behind smiles}.',
+    'Fur becomes skin… fangs become teeth.', 'The moon sets… and {w:the wolf remembers its|the wolves remember their} name.',
+    'Morning… and {w:a monster puts|monsters put} on a friendly face.', 'The sun climbs… {w:the hunter becomes a neighbour|the hunters become neighbours}.',
+    'Claws soften into hands.', 'By daylight, {w:the wolf looks|every wolf looks} like a friend.', 'The howling stops… someone washes their hands.',
+    'Dawn returns {w:the wolf|the wolves} to human form… for now.', '{w:The beast sleeps|The beasts sleep}… behind familiar eyes.',
+    'Sunrise… and a neighbour yawns, a little too full.'],
+  dawnNone: ['Dawn creeps over the rooftops, and every door swings open. Every villager lives… yet a vote seems nigh, as the {w:wolf|wolves} may yet remain.',
+    'The mist lifts, and not a soul is missing.', 'Luck or magic… the {w:wolf|wolves} went hungry… yet a vote seems nigh, as the {w:wolf|wolves} may yet remain.',
+    'Every bed is warm this morning.', 'Every chair is filled at breakfast… yet a vote seems nigh, as the {w:wolf|wolves} may yet remain.'],
+  // One or more deaths. Never name a cause: poison kills too.
+  dawnDead: ['{names} did not survive the night.', '{names} {d:was|were} found by the well, cold as stone.', 'Not everyone woke. {names} {d:is|are} dead.',
+    'The night was cruel. {names} {d:is|are} gone.', '{names} will not see this sunrise.', 'A scream at first light… {names} {d:is|are} dead.',
+    '{names}’s door{d:|s} stood open this morning.', 'The night took {names}.', '{names} {d:was|were} found in the square at dawn.', 'Howlertown mourns {names}.',
+    'Blood on the cobbles. {names} {d:is|are} dead.', '{names} went to bed… and never woke.', '{d:One fewer|Fewer} at breakfast: {names}.',
+    'Death came for {names}.', '{names} {d:lies|lie} still in the square.'],
+  // Two deaths in one night always means the Witch's poison (the wolves take one), so this gives nothing away.
+  witch: ['A witch seems to be at work…', 'Not all of last night’s work was done with teeth.', 'Something brewed in a cauldron did this.',
+    'A potion was poured last night… and not a healing one.', 'Fangs alone did not do this.'],
+  // The day: a mob about to kill one of its own.
+  day: ['The village gathers. Who do you accuse?', 'The square fills with angry faces. Who do you suspect?', 'Morning in Howlertown. The mob wants a name.',
+    'The village gathers, and the rope is ready. Name your suspect.', 'Daylight. Torches are lit anyway. Who is hiding fur?', 'The square is full. Evil must be purged.',
+    'The crowd grows restless. Someone may hang today.', 'Neighbours gather, but not as friends. Who do you accuse?', 'The bell is quiet. Blame is as sinister as fangs.',
+    'The square waits. The mob is hungry for justice.', 'The village gathers, eyes narrowed. One of you will not see nightfall.',
+    'Another day. Pitchforks rise. Who do you trust least?', 'The village gathers. Speak up, or the mob may choose you.', 'Fear turns neighbours into a mob. Who will it be?',
+    'The crowd gathers. Who smells of the forest?'],
+  accuser: ['{accuser} accuses {accused}.', '{accuser} points at {accused}. Speak.', 'The mob turns to {accused}. {accuser}, make your case.', '{accuser} names {accused}.',
+    '{accuser} throws the first stone at {accused}.', 'All eyes on {accused}. {accuser}, tell us why.', '{accuser} wants {accused} on the rope.',
+    '{accuser} smells wolf on {accused}. Explain.'],
+  accused: ['{accused}, defend yourself.', '{accused}, convince us. Your neck depends on it.', '{accused}, why should they not hang you?', 'Speak, {accused}. Convince them.',
+    '{accused}, the mob is listening.', '{accused}, plead your case.', '{accused}, are you one of us?', '{accused}, choose your words carefully.'],
+  vote: ['The talking is done. Vote.', 'The bell has rung. Choose who hangs.', 'Cast your votes.', 'The rope waits. Vote.', 'The mob decides. Vote now.',
+    'Point your finger. Vote.', 'One of you hangs today… or no one. Vote.', 'Vote, and live with it.'],
+  runoff: ['A tie. Vote again: {names}.', 'The mob is split. Choose between {names}.', 'Only {names} remain. Vote.', 'Still no verdict. {names}, one more vote.',
+    'The rope must choose: {names}.'],
+  hanged: ['The village has chosen {name}.', '{name} hangs.', 'The mob has spoken: {name}.', '{name} to the gallows.', 'The rope takes {name}.', '{name}… may the village be right.'],
+  secret: ['Their secret dies with them.'],
+  // Roles revealed only: the lessons of mob rule.
+  shame: ['The villagers’ heads drop in shame.', 'No wolf is revealed. They shudder at what they have done.', 'An innocent swings. The mob falls silent.',
+    'The crowd cannot meet each other’s eyes.', 'Only a neighbour hangs there. Nothing more.', 'The rope was wrong. The {w:wolf is|wolves are} grateful.',
+    'A single smirk is buried in the group.', 'The mob slinks home, quieter than it came.', '{name} was one of you. Remember that.',
+    'The village has done {w:the wolf’s work for it|the wolves’ work for them}.', 'Blood on the village’s hands today.', 'No fur, no fangs. Just {name}.',
+    'The crowd whispers. Who started this?', 'A mother weeps. The mob looks away.', 'Justice? No. Just another grave.'],
+  vindicated: ['Now dead, {name} transforms into a wolf. The mob feels vindicated.', 'Fur bristles from the corpse. The mob cheers.',
+    '{name}’s body twists into a wolf. The village was right.', 'Fangs bared even in death. The mob roars.', 'The beast is unmasked. The crowd breathes again.',
+    'Claws, where hands once were. The mob was right this time.', 'A wolf hangs where {name} stood. Torches are raised high.',
+    'The village exhales. One less monster.', 'The mob grins. Fear has a face, and it hangs.', 'The wolf is dead. But is it the last?'],
+  fool: ['The Fool laughs last.', 'That was exactly what the Fool wanted.', 'Oh dear. You’ve hanged the Fool.'],
+  foolOn: ['{w:But there is still a wolf|But there are still wolves} among the villagers. The game carries on.',
+    'The Fool has had the last laugh, but the {w:wolf still hunts|wolves still hunt}. The game carries on.',
+    'One fool fewer… yet the {w:wolf remains|wolves remain}. The game carries on.', 'The Fool’s joke is over. The {w:wolf’s|wolves’} is not. The game carries on.'],
+  noHang: ['No verdict. No one hangs today.', 'The mob cannot agree. The rope stays empty.', 'Silence. No one hangs.', 'The rope waits for another day.'],
+  wolves: ['Howlertown belongs to the {w:wolf|wolves}.', 'The last candle gutters out. The {w:wolf wins|wolves win}.', 'No one is left to hang. The {w:wolf wins|wolves win}.',
+    'The mob turned on itself, and the {w:wolf|wolves} feasted.', 'The {w:wolf walks|wolves walk} the square in daylight now.'],
+  village: ['The last {w:wolf|of the wolves} falls. The village wins.', 'Howlertown sleeps soundly tonight. The village wins.', 'The pack is broken. The village wins.',
+    'The mob was right… this time. The village wins.', 'The forest is quiet at last. The village wins.'],
+  foolEnd: ['The Fool wins. Who is the fool now?', 'They hanged the Fool, just as the Fool wanted. The Fool wins.', 'The Fool grins from the gallows. The Fool wins.',
+    'The joke is on Howlertown. The Fool wins.'],
 };
-const speakLine = (k, vars = {}) => rnd(SPEAK[k]).replace(/\{(\w+)\}/g, (_, v) => vars[v] ?? '');
-const hasSpeech = () => 'speechSynthesis' in window;
-function narrVoices(){
+// Open discussion has no formal accusations, so it uses only the day lines that don't ask for one.
+VOICE.dayOpen = [3, 5, 6, 7, 9, 10, 11, 14, 15].map(i => VOICE.day[i - 1]);
+const fill = (t, v = {}) => t.replace(/\{(\w+):([^|}]*)\|([^}]*)\}/g, (_, k, a, b) => v[k] === 1 ? a : b).replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
+// Lines come out of a shuffled bag, so none repeats until the rest have been used. ok() can skip lines
+// that don't fit; if none fits, the shortest one is used.
+const bags = {};
+function draw(key, vars = {}, ok = () => true){
+  const list = VOICE[key].map(l => fill(l, vars));
+  for(let pass = 0; pass < 2; pass++){
+    if(!bags[key]?.length) bags[key] = shuffle([...list.keys()]);
+    const i = bags[key].findIndex(j => ok(list[j]));
+    if(i >= 0) return list[bags[key].splice(i, 1)[0]];
+    bags[key] = null;
+  }
+  return list.reduce((a, b) => sayMs(b) < sayMs(a) ? b : a);
+}
+// How many wolves the village knows of: the starting number (from the lobby setting and the head count),
+// less any dead wolves whose roles were revealed. With roles hidden it stays at the starting number.
+function startWolves(){
+  const s = settingsOf(game), n = uids().length;
+  return s.wolves === 'auto' ? autoWolves(n) : Math.max(1, Math.min(+s.wolves, n - 2));
+}
+function pubWolves(justRevealed = {}){
+  const s = settingsOf(game); let w = startWolves();
+  if(s.reveal) for(const r of Object.values({ ...(game.revealed || {}), ...justRevealed })) if(r === 'werewolf') w--;
+  return Math.max(1, w);
+}
+const roleSentence = (u, r) => `${nameOf(u)} was ${r === 'werewolf' ? 'a Werewolf' : r === 'villager' ? 'a Villager' : 'the ' + roleName(r)}.`;
+// Splits a line into spoken pieces: sentences and "…" pauses, and ~very slow~ / _slow_ words.
+function speechParts(text){
+  const out = [];
+  for(const m of text.matchAll(/~([^~]+)~|_([^_]+)_|([^~_]+)/g)){
+    const rate = m[1] ? .45 : m[2] ? .62 : null;
+    for(const piece of (m[1] || m[2] || m[3]).match(/[^.!?…]+[.!?…]*|[.!?…]+/g) || []){
+      const p = piece.trim(); if(!p) continue;
+      const pause = /…$/.test(p) ? 450 : /[.!?]$/.test(p) ? 250 : 60;
+      if(/^[.!?…]+$/.test(p)){ if(out.length) out[out.length - 1].pause = Math.max(out[out.length - 1].pause, pause); continue; }
+      out.push({ t: p.replace(/…/g, ''), rate, pause });
+    }
+  }
+  return out;
+}
+const SPEECH = { rate:.88, pitch:.8 }, NEWS_VOICE = { rate:1.02, pitch:1.15 };
+// Measured on Windows voices: each spoken piece carries ~0.9 s of padding, plus ~0.36 s a word.
+// A line also gets 0.6 s of slack, because a busy device can start speaking a little late.
+const partMs = p => p.t.split(/\s+/).length * 360 * (SPEECH.rate / (p.rate || SPEECH.rate)) + 900 + p.pause;
+const sayMs = text => speechParts(text).reduce((a, p) => a + partMs(p), 600);
+// Sound lengths in ms (measured from the files; no-death and news-notify are the owner's maximums).
+const SND_LEN = { bell:2900, gavel:1200, trapdoor:6100, foolWin:2700, cardHowl:2800, rooster:2200, snarl:2400, cackle:3400, deathReveal:5100,
+  villageWin:8100, howlLoud:5200, noDeath:5000, newsNotify:2000, wolfAttack:10900, wind:12700, howlFar:6400 };
+const scriptMs = items => items.reduce((a, it) => a + (it.t ? sayMs(it.t) : it.snd ? (SND_LEN[it.snd] || 2000) : it.gap || 0), 0);
+const mkSay = items => ({ id: uuid().slice(0, 8), items: items.filter(it => it.t || it.snd || it.gap) });
+// "In other news…": the name lands on its own beat.
+function newsSpeech(news){
+  const punch = FILLERS[news.q]?.[1]; if(!punch || !players()[news.u]) return '';
+  let [before, after = ''] = punch.split('{name}'), name = nameOf(news.u);
+  if(/^[’']s\b/.test(after)){ name += after.slice(0, 2); after = after.slice(2); }
+  before = before.trim();
+  return `In other news… ${before ? before + '… ' : ''}${name}… ${after.trim()}`;
+}
+// The verdict's script: gavel, the hanging line, the trapdoor, the role, the mob's reaction, then the news.
+function verdictScript(e, reason, news, foolEnd){
+  const s = settingsOf(game), items = [{ snd:'gavel' }];
+  if(e){
+    const r = secrets[e]?.role || 'villager', name = nameOf(e);
+    const left = aliveUids().filter(u => u !== e && secrets[u]?.role === 'werewolf').length;
+    const w = pubWolves(s.reveal ? { [e]: r } : {});
+    items.push({ t: draw('hanged', { name }) }, { snd:'trapdoor' });
+    if(r === 'fool'){
+      if(s.reveal) items.push({ t: roleSentence(e, r) });
+      items.push({ t: draw('fool') });
+      if(!foolEnd) items.push({ snd:'foolWin' }, { t: draw('foolOn', { w }) });
+    } else if(!s.reveal) items.push({ t: VOICE.secret[0] });
+    else {
+      items.push({ t: roleSentence(e, r) });
+      if(r === 'werewolf') items.push({ t: draw('vindicated', { name, w }, l => left > 0 || !/the last\?/.test(l)) });
+      else items.push({ t: draw('shame', { name, w }) });
+    }
+  } else items.push({ t: draw('noHang') });
+  const said = news && newsSpeech(news);
+  if(said) items.push({ gap:2500 }, { snd:'newsNotify' }, { t: said, v:'news' });
+  return items;
+}
+const narrVoices = () => {
   if(!hasSpeech()) return [];
   const all = speechSynthesis.getVoices(), en = all.filter(v => /^en/i.test(v.lang));
   return en.length ? en : all;
-}
+};
+const hasSpeech = () => 'speechSynthesis' in window;
 function narrVoice(){
   const vs = narrVoices();
   return vs.find(v => v.voiceURI === soundPrefs.voice) || vs.find(v => /en[-_]GB/i.test(v.lang)) || vs[0] || null;
 }
 if(hasSpeech()) speechSynthesis.addEventListener?.('voiceschanged', () => { if(soundOpen) renderSoundUI(); });
-// Speaks one passage. Split into sentences, because some browsers cut a long utterance short.
-function narrSpeak(text, test){
-  if(!text || !hasSpeech()) return;
-  if(!test && !(isSoundDevice() && soundPrefs.narrator)) return;
-  if(!test && game && settingsOf(game).test.on) soundCaption('🗣 ' + text, 2500 + text.length * 60);
-  const v = narrVoice();
-  for(const part of text.match(/[^.!?]+[.!?]*/g) || [text]){
-    const u = new SpeechSynthesisUtterance(part.trim());
-    if(v){ u.voice = v; u.lang = v.lang; }
-    u.rate = .88; u.pitch = .8; u.volume = soundPrefs.volume;
-    speechSynthesis.speak(u);
+// Playing scripts on the sound device. One thing at a time: speech waits for any planned sound still
+// playing (busyUntil), random ambience fades out when a planned moment starts, the day murmur dips
+// under speech, and a new script cuts off the old one.
+let scriptSeen = null, scriptTok = 0, speaking = false;
+const sleep = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
+function stopSpeech(){ speaking = false; duck(false); if(hasSpeech()) try { speechSynthesis.cancel(); } catch(_) {} }
+function duck(on){
+  const h = loops.murmur; if(!h?.g || !actx) return;
+  h.g.gain.setTargetAtTime(on ? 0 : SOUNDS.murmur.vol, actx.currentTime, .2);
+}
+function scriptWatch(){
+  const ph = game?.phase, say = ph?.floor?.say || ph?.say, id = say?.id;
+  if(scriptSeen === null){ scriptSeen = new Set(); if(id) scriptSeen.add(id); return; }   // the first look after loading plays nothing
+  if(!id || scriptSeen.has(id)) return;
+  scriptSeen.add(id); const tok = ++scriptTok; stopSpeech();
+  if(isSoundDevice()) runScript(say, tok);
+}
+setInterval(() => { if(game) scriptWatch(); }, 200);      // don't wait for the next redraw to start a line
+async function runScript(say, tok){
+  const live = () => tok === scriptTok;
+  for(const it of say.items){
+    if(it.at) await sleep(it.at - now());
+    if(!live()) return;
+    if(it.gap){ await sleep(it.gap); continue; }
+    if(it.snd){ fadeAmbient(); const h = await playSound(it.snd); if(h?.src?.buffer) await sleep(h.src.buffer.duration * 1000); continue; }
+    await sleep(busyUntil - now()); if(!live()) return;
+    if(it.by && now() + sayMs(it.t) - 600 > it.by) continue;   // too late to finish before the animation's next sound: skip it
+    await speakLine(it.t, it.v, live);
   }
 }
-// Watches the public record, like soundWatch, and tells each moment. A new moment cuts off the old one.
-let narrKey = undefined, narrTimers = [];
-function narrWatch(){
-  const ph = game?.phase || {}, f = ph.floor;
-  const key = game ? `${game.gameNo}|${game.status}|${ph.name}|${ph.n}|${ph.round || ''}|${f ? f.accuser + f.stage : ''}|${ph.name === 'deal' && allDrawn(ph) ? 'done' : ''}` : null;
-  if(key === narrKey) return;
-  const first = narrKey === undefined; narrKey = key;
-  narrTimers.forEach(clearTimeout); narrTimers = [];
-  if(hasSpeech()) try { speechSynthesis.cancel(); } catch(_) {}
-  if(first || !game || !isSoundDevice() || !soundPrefs.narrator) return;
-  const at = (ms, text) => narrTimers.push(setTimeout(() => narrSpeak(text), Math.max(0, ms)));
-  const t = now();
-  if(game.status === 'ended'){ const w = game.result?.winner;
-    if(w === 'wolves' || w === 'village') at(1500, speakLine(w)); else if(w === 'fool') at(1500, speakLine('foolEnd'));
-    return; }
-  if(game.status !== 'playing') return;
-  const n = ph.n;
-  if(ph.name === 'deal') at(allDrawn(ph) ? 600 : (ph.showAt || t) - t + 500, speakLine(allDrawn(ph) ? 'dealDone' : 'deal'));
-  if(ph.name === 'night') at((ph.startedAt || t) - t + 600, speakLine(n === 1 ? 'night1' : 'night', { count: aliveUids().length })
-    + (ph.parity && settingsOf(game).reveal ? ' ' + speakLine('parity') : ''));
-  if(ph.name === 'dawn'){ const d = ph.deaths || [];
-    const text = !d.length ? speakLine('dawnNone') : speakLine(d.length > 1 ? 'dawnMany' : 'dawnOne', { names: nameList(d.map(nameOf)) }) + d.map(revealLine).join('');
-    at((ph.introAt || t) + (ph.intro?.ms || 0) - t + 1400, text); }
-  if(ph.name === 'day'){
-    if(f) at(300, speakLine(f.stage === 'accuser' ? 'accuser' : 'accused', { accuser: nameOf(f.accuser), accused: nameOf(f.accused) }));
-    else if(ph.round === 1 && !(ph.accused || []).length) at(300, speakLine(ph.mode === 'open' ? 'dayOpen' : 'dayStructured', { n })); }
-  if(ph.name === 'vote') at(300, ph.round === 2 ? speakLine('runoff', { names: nameList(ph.candidates.map(nameOf)) }) : speakLine('vote'));
-  if(ph.name === 'verdict'){
-    let text = ph.eliminated ? speakLine('elim', { name: nameOf(ph.eliminated) }) + (revealLine(ph.eliminated) || ' ' + speakLine('secret'))
-      : speakLine(ph.reason === 'tie' ? 'noneTie' : 'noneVotes');
-    if(ph.eliminated && game.foolWon === ph.eliminated) text += ' ' + speakLine('fool');
-    const news = newsLine(ph); if(news) text += ' ' + news;
-    at(2600, text); }
+async function speakLine(text, style, live = () => true, test){
+  if(!text || !hasSpeech() || (!test && !(isSoundDevice() && soundPrefs.narrator))) return;
+  if(!test && settingsOf(game).test.on) soundCaption('🗣 ' + text.replace(/[~_]/g, ''), 2500 + text.length * 60);
+  fadeAmbient(); duck(true); speaking = true;
+  const st = style === 'news' ? NEWS_VOICE : SPEECH, v = narrVoice();
+  for(const p of speechParts(text)){
+    if(!live()) break;
+    await new Promise(res => {
+      const u = new SpeechSynthesisUtterance(p.t);
+      if(v){ u.voice = v; u.lang = v.lang; }
+      u.rate = p.rate || st.rate; u.pitch = st.pitch; u.volume = soundPrefs.volume;
+      const to = setTimeout(res, partMs(p) * 2 + 2000);      // some browsers never fire onend
+      u.onend = u.onerror = () => { clearTimeout(to); res(); };
+      speechSynthesis.speak(u);
+    });
+    await sleep(p.pause);
+  }
+  if(live()){ speaking = false; duck(false); }
 }
 // Random night ambience, checked once a second: wind, distant howls, snarls, and the Witch while she lives.
 setInterval(() => {
@@ -517,9 +636,13 @@ setInterval(() => {
   if(game) renderSoundUI();                                      // the sound device can change as Criers come and go
   if(!ph || game.status !== 'playing' || ph.name !== 'night' || ph.pausedAt || !isSoundDevice()) return;
   if(now() - ph.startedAt < 4000 || now() - lastNightSound < 6000) return;   // let the loud howl have the opening; no pile-ups
+  if(speaking || now() < busyUntil || randomNow.size) return;               // never over speech or another sound
   const r = Math.random(), pick = r < 1 / 22 ? 'wind' : r < 1 / 22 + 1 / 35 ? 'howlFar' : r < 1 / 22 + 1 / 35 + 1 / 45 ? 'snarl'
     : ph.witchAlive && r < 1 / 22 + 1 / 35 + 1 / 45 + 1 / 60 ? 'cackle' : null;
-  if(pick){ lastNightSound = now(); playSound(pick); if(pick === 'wind') fxGust(); }          // the gust you hear, you also see
+  // Hold off if it couldn't finish before the next known moment: the wolves' attack or the night's end.
+  const next = Math.min(ph.endsAt || Infinity, ph.attackAt > now() ? ph.attackAt : Infinity);
+  if(pick && now() + (SND_LEN[pick] || 4000) + 500 > next) return;
+  if(pick){ lastNightSound = now(); playSound(pick, { random:true }); if(pick === 'wind') fxGust(); }   // the gust you hear, you also see
 }, 1000);
 let lastNightSound = 0;
 // The sound panel: on the sound device only (the Crier, or the host when there's no Crier).
@@ -844,7 +967,7 @@ async function startGame(){
   // and Night 1 begins when the host presses Start the game once every card is drawn.
   const t = now();
   const up = { status:'playing', revealed:{}, revealedArt:{}, lastNight:null, result:null, foolWon:null, startedAt: t, gameNo: (game.gameNo || 0) + 1,
-    phase: { name:'deal', n:0, startedAt:t, showAt: t + 2000, cards: list.length, picks:{} } };
+    phase: { name:'deal', n:0, startedAt:t, showAt: t + 2000, cards: list.length, picks:{}, say: mkSay([{ at: t + 2500, t: draw('deal') }]) } };
   for(const u of list) up[`players.${u}.alive`] = true;
   await upd(up);
   secrets = {}; for(const u of list) secrets[u] = { role: deal[u], art: art[u], potions: deal[u] === 'witch' ? { save:true, kill:true } : null };
@@ -899,8 +1022,11 @@ async function startNight(n){
   // The night's silly questions: one shared question at a time, in a fresh shuffled order each night.
   const order = shuffle([...FILLERS.keys()]);
   await DB.set(`${gp()}/live/filler`, { n, round:1, q: order[0], order, roundAt: t0, picks:{}, past:[] });
+  // The narrator speaks as the faces pile up, and must finish before the wolf howls.
+  const howl = faces.length * INTRO.step + INTRO.wolfIn + INTRO.wolfHold, room = howl - 400 - 800;
+  const say = mkSay([{ at: t + 400, by: t + howl - 300, t: draw('night', { w: pubWolves() }, l => sayMs(l) <= room) }]);
   // witchAlive is public on purpose: the sound device cackles only while she lives.
-  await upd({ phase: { name:'night', n, introAt:t, intro:{ faces, ms }, startedAt:t0, endsAt: t0 + d.night * 1000, wolfEndsAt, parity: wolfEndsAt !== null || wolves >= al.length - wolves,
+  await upd({ phase: { name:'night', n, introAt:t, intro:{ faces, ms }, say, startedAt:t0, endsAt: t0 + d.night * 1000, wolfEndsAt, parity: wolfEndsAt !== null || wolves >= al.length - wolves,
     witchAlive: al.some(u => secrets[u]?.role === 'witch') } });
 }
 async function lockWolves(n, target, failed){
@@ -947,6 +1073,8 @@ async function stepNight(ph, t){
   const need = al.filter(u => ['seer','doctor'].includes(secrets[u]?.role) ||
     (secrets[u]?.role === 'witch' && (secrets[u].potions?.save || secrets[u].potions?.kill)));
   const allDone = locked && need.every(u => act(u)?.done);
+  // The night never ends over the wolves' attack sound: dawn waits until it has finished.
+  if(ph.attackAt && t < ph.attackAt + SND_LEN.wolfAttack + 500) return;
   if(t >= ph.endsAt || (allDone && t >= ph.startedAt + d.minNight * 1000)) await resolveNight(ph);
 }
 async function resolveNight(ph){
@@ -978,10 +1106,22 @@ async function resolveNight(ph){
   await logHistory(`n${String(n).padStart(2,'0')}a`, { type:'night', n, wolfPicks, wolfTarget: nt.wolfTarget || null, wolfFailed: !!nt.wolfFailed,
     doctor: doc ? (act(doc)?.target || null) : null, witchSave: !!(wa?.save && victim), witchKill: wa?.kill || null, witchBy: witch || null,
     seer: sa?.target ? { by: seerU, target: sa.target, wolf: secrets[sa.target]?.role === 'werewolf' } : null, deaths, saved });
-  const causes = {}; if(deaths.length > 1) for(const u of deaths) causes[u] = u === victim && !saved ? 'wolf' : 'poison';
   // Dawn plays the night's animation in reverse: wolf back to the same faces, ending on a human.
+  // Nobody is told which death was the poison (the owner's call), so no cause is published.
   const faces = (game.phase?.intro?.faces || []).slice().reverse(), ms = introMs(faces, true);
-  const up = { phase: { name:'dawn', n, introAt:t, intro:{ faces, ms }, startedAt: t + ms, endsAt: t + ms + d.dawn * 1000, deaths, causes }, lastNight: { n, deaths } };
+  const shown = {}; if(s.reveal) for(const u of deaths) shown[u] = secrets[u]?.role || 'villager';
+  const v = { w: pubWolves(shown), d: deaths.length, names: nameList(deaths.map(nameOf)) };
+  // The script: a line over the animation (after the growl, ending before the rooster), then once the
+  // circle has opened, the death sound and the deaths, or the no-death line and the village's relief.
+  const animAt = SND_LEN.snarl + 300, rooster = introSeqMs(faces.length) - DAWN.skip + DAWN.blackAt + DAWN.black, room = rooster - animAt - 800;
+  const after = deaths.length
+    ? [{ snd:'deathReveal' }, { t: draw('dawnDead', v) + (s.reveal ? ' ' + deaths.map(u => roleSentence(u, shown[u])).join(' ') : '') },
+       ...(deaths.length > 1 ? [{ t: draw('witch', v) }, { snd:'cackle' }] : [])]
+    : [{ t: draw('dawnNone', v) }, { snd:'noDeath' }];
+  after[0].at = t + ms;
+  const say = mkSay([{ at: t + animAt, by: t + rooster - 300, t: draw('dawnAnim', v, l => sayMs(l) <= room) }, ...after]);
+  const up = { phase: { name:'dawn', n, introAt:t, intro:{ faces, ms }, say, startedAt: t + ms,
+    endsAt: t + ms + Math.max(d.dawn * 1000, scriptMs(after) + 3000), deaths }, lastNight: { n, deaths } };
   for(const u of deaths){ up[`players.${u}.alive`] = false;
     if(s.reveal){ up[`revealed.${u}`] = secrets[u]?.role || 'villager'; up[`revealedArt.${u}`] = artOf(u); } }
   await upd(up);
@@ -995,16 +1135,22 @@ async function afterDeaths(next){
 }
 async function startDay(n){
   const s = settingsOf(game), d = dur(s), t = now();
+  // The clock holds while the narrator opens the day (holdUntil), so no talking time is lost.
+  const line = draw(s.dayMode === 'open' ? 'dayOpen' : 'day'), hold = t + 500 + sayMs(line);
   await upd({ phase: { name:'day', n, mode: s.dayMode, startedAt:t, round:1, floor:null, accused:[], ready:{},
-    endsAt: t + (s.dayMode === 'open' ? d.discussion : d.window) * 1000 } });
+    say: mkSay([{ at: t + 500, t: line }]), holdUntil: hold, endsAt: hold + (s.dayMode === 'open' ? d.discussion : d.window) * 1000 } });
 }
 async function stepDay(ph, t){
   const s = settingsOf(game), d = dur(s), al = aliveUids();
+  if(t < (ph.floor?.holdUntil || ph.holdUntil || 0)) return;          // never cut the narrator off
   if(al.every(u => ph.ready?.[u])) return startVote(ph.n, 1, al);
   if(ph.mode === 'open'){ if(t >= ph.endsAt) return startVote(ph.n, 1, al); return; }
   if(ph.floor){
     if(t < ph.floor.endsAt) return;
-    if(ph.floor.stage === 'accuser') return upd({ 'phase.floor.stage':'accused', 'phase.floor.endsAt': t + d.speak * 1000 });
+    if(ph.floor.stage === 'accuser'){
+      const line = draw('accused', { accused: nameOf(ph.floor.accused) }), hold = t + sayMs(line);
+      return upd({ 'phase.floor.stage':'accused', 'phase.floor.say': mkSay([{ t: line }]), 'phase.floor.holdUntil': hold, 'phase.floor.endsAt': hold + d.speak * 1000 });
+    }
     const r = ph.round + 1;
     if(r > s.rounds) return startVote(ph.n, 1, al);
     return upd({ 'phase.floor': null, 'phase.round': r, 'phase.roundAt': t, 'phase.endsAt': t + d.window * 1000 });
@@ -1013,7 +1159,10 @@ async function stepDay(ph, t){
 }
 async function startVote(n, round, candidates){
   const d = dur(settingsOf(game)), t = now();
-  await upd({ phase: { name:'vote', n, round, candidates, votes:{}, startedAt:t, endsAt: t + d.voteTime * 1000 } });
+  // The bell (first vote only), then the line; the vote clock waits for both.
+  const items = round === 2 ? [{ t: draw('runoff', { names: nameList(candidates.map(nameOf)) }) }] : [{ snd:'bell' }, { t: draw('vote') }];
+  const hold = t + scriptMs(items);
+  await upd({ phase: { name:'vote', n, round, candidates, votes:{}, startedAt:t, say: mkSay(items), holdUntil: hold, endsAt: hold + d.voteTime * 1000 } });
 }
 // "In other news…": the question and name with the most picks during night n's silly questions
 // (a random one on a tie), or null if nobody picked anyone.
@@ -1027,6 +1176,7 @@ function nightNews(n){
 }
 async function stepVote(ph, t){
   const al = aliveUids();
+  if(t < (ph.holdUntil || 0)) return;                                  // let the bell and the line finish
   if(!(al.every(u => ph.votes?.[u]) || t >= ph.endsAt)) return;
   const s = settingsOf(game), d = dur(s);
   const tally = {}; for(const c of ph.candidates) tally[c] = 0;
@@ -1042,10 +1192,13 @@ async function stepVote(ph, t){
   const up = { phase: { name:'verdict', n: ph.n, startedAt:t, endsAt: t + d.verdict * 1000, eliminated, reason, round: ph.round, tally,
     votes: s.votes === 'public' ? (ph.votes || {}) : null, foolEnd: false, news } };
   if(eliminated){
-    up[`players.${eliminated}.alive`] = false;
     if(s.reveal){ up[`revealed.${eliminated}`] = secrets[eliminated]?.role || 'villager'; up[`revealedArt.${eliminated}`] = artOf(eliminated); }
     if(secrets[eliminated]?.role === 'fool'){ up.foolWon = eliminated; up.phase.foolEnd = s.foolWin === 'end'; }
   }
+  // Built before the hanged player is marked dead, so the wolf count it uses is still the public one.
+  const items = verdictScript(eliminated, reason, news, up.phase.foolEnd);
+  up.phase.say = mkSay(items); up.phase.endsAt = t + Math.max(d.verdict * 1000, scriptMs(items) + 2500);
+  if(eliminated) up[`players.${eliminated}.alive`] = false;
   await upd(up);
 }
 const teamOf = r => r === 'werewolf' ? 'wolves' : r === 'fool' ? 'fool' : 'village';
@@ -1069,7 +1222,12 @@ async function endGame(winner){
   const rev = {}, alive = {}, rart = {}; for(const u of uids()){ rev[u] = secrets[u]?.role || 'villager'; alive[u] = isAlive(u); rart[u] = artOf(u); }
   const foolWon = game.foolWon || (winner === 'fool' ? uids().find(u => rev[u] === 'fool') : null);
   const points = scoreGame(winner, rev, alive, foolWon);
-  const up = { status:'ended', result: { winner, at: now(), points }, revealed: rev, revealedArt: rart, phase: { name:'ended', n: game.phase?.n || 0 } };
+  // The win sound, then the line. Everyone's role is revealed now, so the wolves' line uses the real count.
+  const wolvesLeft = uids().filter(u => alive[u] && rev[u] === 'werewolf').length;
+  const items = winner === 'wolves' ? [{ snd:'howlLoud' }, { t: draw('wolves', { w: wolvesLeft }) }]
+    : winner === 'village' ? [{ snd:'villageWin' }, { t: draw('village', { w: startWolves() }) }]
+    : winner === 'fool' ? [{ snd:'foolWin' }, { t: draw('foolEnd') }] : [];
+  const up = { status:'ended', result: { winner, at: now(), points }, revealed: rev, revealedArt: rart, phase: { name:'ended', n: game.phase?.n || 0, say: mkSay(items) } };
   for(const u of uids()) up[`players.${u}.score`] = (players()[u].score || 0) + (points[u] || 0);
   await upd(up);
 }
@@ -1079,6 +1237,8 @@ async function hostTick(){
   ticking = true;
   try{
     const ph = game.phase, t = now();
+    // The deal: once every card is drawn, the narrator says so (after the last name's howl).
+    if(ph.name === 'deal' && allDrawn(ph) && !ph.doneSay) await upd({ 'phase.doneSay': true, 'phase.say': mkSay([{ at: t + 2600, t: draw('dealDone', { w: startWolves() }) }]) });
     if(ph.name === 'night') await stepNight(ph, t);
     else if(ph.name === 'dawn'){ if(t >= ph.endsAt) await afterDeaths('day'); }
     else if(ph.name === 'day') await stepDay(ph, t);
@@ -1147,8 +1307,9 @@ async function claimFloor(accuser, target){
   return DB.transact(gp(), g => {
     const p = g?.phase; if(!p || p.name !== 'day' || p.mode !== 'structured' || p.floor || p.pausedAt) return null;
     if((p.accused || []).includes(target) || g.players[target]?.alive === false || g.players[accuser]?.alive === false) return null;
-    const d = dur(settingsOf(g));
-    return { 'phase.floor': { accuser, accused: target, stage:'accuser', endsAt: now() + d.speak * 1000 }, 'phase.accused': [...(p.accused || []), target] };
+    const d = dur(settingsOf(g)), line = draw('accuser', { accuser: g.players[accuser]?.name, accused: g.players[target]?.name }), hold = now() + sayMs(line);
+    return { 'phase.floor': { accuser, accused: target, stage:'accuser', say: mkSay([{ t: line }]), holdUntil: hold, endsAt: hold + d.speak * 1000 },
+      'phase.accused': [...(p.accused || []), target] };
   });
 }
 
@@ -1158,8 +1319,10 @@ async function togglePause(){
   if(!ph.pausedAt) return upd({ 'phase.pausedAt': now() });
   const shift = now() - ph.pausedAt; const up = { 'phase.pausedAt': null };
   if(ph.endsAt) up['phase.endsAt'] = ph.endsAt + shift;
+  if(ph.holdUntil) up['phase.holdUntil'] = ph.holdUntil + shift;
   if(ph.wolfEndsAt) up['phase.wolfEndsAt'] = ph.wolfEndsAt + shift;
   if(ph.floor) up['phase.floor.endsAt'] = ph.floor.endsAt + shift;
+  if(ph.floor?.holdUntil) up['phase.floor.holdUntil'] = ph.floor.holdUntil + shift;
   return upd(up);
 }
 async function skipAhead(){
@@ -1549,7 +1712,7 @@ function playerList(list, opts = {}){
 const initials = u => { const p = nameOf(u).trim().split(/\s+/); return (p.length > 1 ? p[0][0] + p[p.length - 1][0] : p[0].slice(0, 2)).toUpperCase(); };
 function render(){
   if(!game) return;
-  soundWatch(); narrWatch(); attackWatch(); renderSoundUI(); renderIntro(); fxMoon(); fxSun();
+  soundWatch(); scriptWatch(); attackWatch(); renderSoundUI(); renderIntro(); fxMoon(); fxSun();
   $('home').classList.add('hidden');
   if(crier) return renderCrier();
   if(game.status === 'lobby'){ $('lobby').classList.remove('hidden'); $('game').classList.add('hidden'); setScene('night'); renderLobby();
@@ -2361,9 +2524,11 @@ function renderRole(){
 function tickClock(){
   const ph = game?.phase; if(!ph || game.status !== 'playing'){ if($('clock')) $('clock').textContent = ''; return; }
   const t = now();
-  $('clock').textContent = ph.pausedAt ? 'Paused' : ph.floor ? fmt(ph.floor.endsAt - t) : ph.endsAt ? fmt(ph.endsAt - t) : '';
+  // A clock held for the narrator (holdUntil) shows its full time until the line is spoken.
+  const left = (end, hold) => end - Math.max(t, hold || 0);
+  $('clock').textContent = ph.pausedAt ? 'Paused' : ph.floor ? fmt(left(ph.floor.endsAt, ph.floor.holdUntil)) : ph.endsAt ? fmt(left(ph.endsAt, ph.holdUntil)) : '';
   const cc = $('c-clock'); if(cc) cc.textContent = ph.pausedAt ? '' : $('clock').textContent;
-  const fc = $('floorclock'); if(fc && ph.floor) fc.textContent = ph.pausedAt ? 'paused' : fmt(ph.floor.endsAt - t);
+  const fc = $('floorclock'); if(fc && ph.floor) fc.textContent = ph.pausedAt ? 'paused' : fmt(left(ph.floor.endsAt, ph.floor.holdUntil));
   const wc = $('wolfclock'); if(wc && ph.wolfEndsAt) wc.textContent = fmt(ph.wolfEndsAt - (ph.pausedAt || t));
 }
 setInterval(tickClock, 250);
@@ -2382,7 +2547,7 @@ document.addEventListener('click', async e => {
       case 'snd-close': soundOpen = false; return renderSoundUI();
       case 'snd-unlock': await audio()?.resume(); return render();
       case 'snd-test': testChime(); soundCaption('Test chime'); return;
-      case 'snd-voice': return narrSpeak('Night falls on Howlertown. Bar your doors… and trust no one.', true);
+      case 'snd-voice': stopSpeech(); return speakLine('Fate deals the roles. Choose and tell no one.', null, undefined, true);
       case 'join': return joinGame(el.dataset.code);
       case 'leave':
         if(game?.status === 'lobby' && !isHost()) await DB.update(gp(), { [`players.${myUid}`]: null });
