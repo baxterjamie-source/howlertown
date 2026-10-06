@@ -443,9 +443,15 @@ const VOICE = {
     'Claws soften into hands.', 'By daylight, {w:the wolf looks|every wolf looks} like a friend.', 'The howling stops… someone washes their hands.',
     'Dawn returns {w:the wolf|the wolves} to human form… for now.', '{w:The beast sleeps|The beasts sleep}… behind familiar eyes.',
     'Sunrise… and a neighbour yawns, a little too full.'],
-  dawnNone: ['Dawn creeps over the rooftops, and every door swings open. Every villager lives… yet a vote seems nigh, as the {w:wolf|wolves} may yet remain.',
-    'The mist lifts, and not a soul is missing.', 'Luck or magic… the {w:wolf|wolves} went hungry… yet a vote seems nigh, as the {w:wolf|wolves} may yet remain.',
-    'Every bed is warm this morning.', 'Every chair is filled at breakfast… yet a vote seems nigh, as the {w:wolf|wolves} may yet remain.'],
+  // Nobody died: the good news, then the crowd's relief (no-death.mp3 plays at the "|"), then reality sets in:
+  // suspicion still runs high, the danger remains, and the village must vote anyway.
+  dawnNone: ['Dawn creeps over the rooftops, and every villager lives…|…yet suspicion runs high. The {w:wolf is|wolves are} still among you, and a vote must be had.',
+    'The mist lifts, and not a soul is missing…|…but no one sleeps easy. Danger lingers, and the village must still vote.',
+    'Luck or magic… the {w:wolf|wolves} went hungry…|…for now. Eyes narrow across the square. A vote must still be cast.',
+    'Every bed is warm this morning…|…but every neighbour is watched. The danger has not passed. Today, the village votes.',
+    'Every chair is filled at breakfast…|…yet no one trusts the person beside them. The {w:wolf still hides|wolves still hide}, and a vote seems nigh.',
+    'No blood on the cobbles this morning…|…but the air is thick with suspicion. The village must vote all the same.',
+    'Everyone wakes…|…and everyone wonders why. Someone here is hiding something. The vote cannot wait.'],
   // One or more deaths. Never name a cause: poison kills too.
   dawnDead: ['{names} did not survive the night.', '{names} {d:was|were} found by the well, cold as stone.', 'Not everyone woke. {names} {d:is|are} dead.',
     'The night was cruel. {names} {d:is|are} gone.', '{names} will not see this sunrise.', 'A scream at first light… {names} {d:is|are} dead.',
@@ -1153,7 +1159,7 @@ async function resolveNight(ph){
   const after = deaths.length
     ? [{ snd:'deathReveal' }, { t: draw('dawnDead', v) + (s.reveal ? ' ' + deaths.map(u => roleSentence(u, shown[u])).join(' ') : '') },
        ...(deaths.length > 1 ? [{ t: draw('witch', v) }, { snd:'cackle' }] : [])]
-    : [{ t: draw('dawnNone', v) }, { snd:'noDeath' }];
+    : (([good, real]) => [{ t: good }, { snd:'noDeath' }, { t: real }])(draw('dawnNone', v).split('|'));
   after[0].at = t + ms;
   const say = mkSay([{ at: t + animAt, by: t + rooster - 300, t: draw('dawnAnim', v, l => sayMs(l) <= room) }, ...after]);
   const up = { phase: { name:'dawn', n, introAt:t, intro:{ faces, ms }, say, startedAt: t + ms,
@@ -1304,7 +1310,8 @@ async function runBots(){
   for(const b of bots){
     const r = secrets[b]?.role; const a = actions[b];
     if(ph.name === 'deal'){
-      if(!ph.picks?.[b] && t > ph.showAt + 3000 && Math.random() < .015){
+      // Bots draw at a human-ish pace: from 2 s after the cards appear, and always within 12 s.
+      if(!ph.picks?.[b] && t > ph.showAt + 2000 && (Math.random() < .05 || t > ph.showAt + 12000)){
         const taken = new Set(Object.values(ph.picks || {}).map(x => x.card));
         const free = [...Array(ph.cards).keys()].filter(i => !taken.has(i));
         if(free.length) await drawCard(b, rnd(free));
@@ -1525,7 +1532,9 @@ const FX = {
   moon: { x:700, y:200, r:20 },            // over the forest road, low enough to show in the phone banner, clear of the title
   // Chimney tops (the same on the night, dawn and day paintings): smoke rises from these all day and night.
   chimneys: [[47,153],[203,273],[347,220],[497,343],[887,267],[1113,220]],
-  sun: { x:600, y:192 },                   // over the forest road, left of the tower; rises as dawn turns to day
+  // The sun sits in open sky, clear of the trees (owner, 2026-10-06): on phones (which show only the sky
+  // just above the rooftops) between the forest and the watchtower; on the Crier higher up, to the right.
+  sun: { x:682, y:196, rise:22, crier:{ x:820, y:88, rise:60 } },
   // Placed by the owner with tools/preview/place.html: [x, y, w, h] window glass, [x, y, size] eye pairs.
   windows: [[53,384,5,12],[53,400,5,12],[53,415,5,12],[64,415,6,11],[63,399,6,12],[63,383,6,11],[120,377,5,11],[120,392,5,11],[120,405,5,11],[129,376,5,11],[129,390,5,11],[129,405,5,9],[173,198,2,12],
     [338,390,2,3],[342,390,2,3],[338,396,2,3],[343,396,2,3],[338,402,3,4],[343,402,2,4],[392,228,8,14],[488,299,3,10],[474,300,3,9],[460,301,3,9],[447,301,3,9],[494,321,4,13],[1175,315,10,37],
@@ -1582,8 +1591,10 @@ function fxSun(){
   const ph = game?.phase, day = game?.status === 'playing' && ph?.name === 'day';
   const key = day ? `${game.gameNo}-${ph.n}` : null; if(key === sunKey) return; sunKey = key;
   el.getAnimations().forEach(a => a.cancel());
+  const at = crier ? FX.sun.crier : FX.sun;
+  el.parentNode.setAttribute('transform', `translate(${at.x} ${at.y})`);
   if(!day) return;
-  const a = el.animate([{ transform:'translateY(60px)', opacity:0 }, { opacity:1, offset:.4 }, { transform:'translateY(0)', opacity:1 }], { duration:8000, easing:'cubic-bezier(.3,.1,.3,1)', fill:'both' });
+  const a = el.animate([{ transform:`translateY(${at.rise}px)`, opacity:0 }, { opacity:1, offset:.4 }, { transform:'translateY(0)', opacity:1 }], { duration:8000, easing:'cubic-bezier(.3,.1,.3,1)', fill:'both' });
   a.currentTime = now() - (ph.startedAt || now());
 }
 // Smoke: soft puffs rise, swell and drift with the breeze; a little stronger with each gust of wind.
