@@ -2383,8 +2383,8 @@ function votePanel(ph){
 }
 function verdictPanel(ph){
   if(ph.decided) return '';                                           // the game is over: the votes are in "How it happened"
-  const news = newsLine(ph) ? `<p class="hint" style="margin-top:12px;font-style:italic">${esc(newsLine(ph))}</p>` : '';
-  return resultsHTML(ph.tally, ph.votes, 'How the village voted') + news;
+  // (The news isn't repeated here: the narration line above already shows it, as the narrator says it.)
+  return resultsHTML(ph.tally, ph.votes, 'How the village voted');
 }
 // Group by who received votes: their name, then who voted for them (public votes) or just the count
 // (anonymous: votes is null). Stable order: most votes first.
