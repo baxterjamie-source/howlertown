@@ -269,6 +269,68 @@ body.crier .risename{font-size:5.5vh}
 .seal.cb.mini.open::before{display:none}
 .role.slot{border-style:dashed;background:transparent;cursor:default}
 .role.slot>*{visibility:hidden}
+/* Ways out sit at the very bottom of each screen */
+.exitrow{margin-top:26px;padding-top:12px;border-top:1px solid var(--line)}
+/* ---- Splash: the night village fills the screen (first visit) ---- */
+body.splash .app{max-width:none;background:#05070c}
+body.splash .banner{height:100vh;height:100dvh}
+body.splash .banner::after{height:45vh;background:linear-gradient(to bottom,transparent,rgba(5,7,12,.85))}
+body.splash .wrap,body.splash #statbtn,body.splash #statpanel,body.splash .wordmark,body.splash #sndui{display:none!important}
+#splash{position:fixed;inset:0;z-index:20;display:flex;align-items:flex-end;justify-content:center;pointer-events:none}
+#splash .sp-inner{pointer-events:auto;text-align:center;padding:0 16px calc(6vh + env(safe-area-inset-bottom,0px))}
+.sp-title{margin:0;font-family:var(--serif);font-weight:400;font-size:clamp(44px,9vw,96px);color:var(--parch);text-shadow:0 4px 24px #000}
+.sp-tag{margin:2px 0 22px;color:var(--parch);opacity:.85;font-size:clamp(16px,2.4vw,22px);text-shadow:0 2px 10px #000}
+.sp-btns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.sp-btn{font-size:20px;padding:13px 28px;min-width:150px;background:rgba(15,19,32,.85)}
+/* ---- How to Play: Watch (the narrated walkthrough) and Rules ---- */
+#howto{position:fixed;inset:0;z-index:95;background:#07090f;display:flex;flex-direction:column;overflow:hidden}
+body.howto-open{overflow:hidden}
+.ht-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.ht-head>b{font-family:var(--serif);font-size:20px;font-weight:400;flex:1}
+.ht-tabs{display:flex;gap:6px}
+.ht-stage{position:relative;flex:1;min-height:0;overflow:hidden;background:#05070c}
+.ht-stage svg{position:absolute;inset:0;width:100%;height:100%}
+.ht-over{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:10px}
+.ht-cap{margin:0;padding:12px 16px 4px;min-height:3.2em;text-align:center;font-family:var(--serif);font-size:clamp(18px,2.6vw,28px);line-height:1.3}
+.ht-ctrl{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;padding:6px 12px calc(12px + env(safe-area-inset-bottom,0px))}
+.ht-ctrl select{max-width:52vw}
+.ht-rules{flex:1;overflow:auto;padding:6px 20px 40px;max-width:720px;margin:0 auto;line-height:1.5}
+.ht-rules h3{font-family:var(--serif);font-weight:400;color:var(--ember);margin:20px 0 4px;font-size:21px}
+.ht-rules ul{padding-left:20px} .ht-rules li{margin:6px 0}
+.ht-phone{width:min(30vh,44vw);aspect-ratio:9/16;border:3px solid #2c3346;border-radius:22px;background:var(--ink);padding:12px 9px;overflow:hidden;font-size:clamp(9px,1.4vh,13px);box-shadow:0 10px 40px rgba(0,0,0,.7)}
+.ht-phone h2{font-size:1.35em;margin:0 0 4px} .ht-phone .hint{font-size:.9em;margin:0 0 6px}
+.ht-phone .pl{padding:.45em .7em;margin:.35em 0;font-size:1em}
+.ht-trio{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
+.ht-trio .ht-phone{width:min(22vh,29vw)}
+.ht-note{background:rgba(15,19,32,.9);border:1px solid var(--line);border-radius:14px;padding:12px 18px;text-align:center;font-family:var(--serif);font-size:clamp(17px,2.6vh,26px)}
+.ht-note b{display:block;font-weight:400} .ht-note span{display:block;font-family:var(--sans);font-size:.65em;color:var(--dim);margin-top:4px}
+.ht-phones{position:absolute;inset:0}
+.ht-mini{position:absolute;width:min(9vh,13vw);aspect-ratio:9/16;border:2px solid #39415a;border-radius:10px;background:linear-gradient(#1c2438,#0f1320);box-shadow:0 0 18px rgba(224,162,74,.35);display:flex;align-items:flex-end;justify-content:center;font-size:11px;padding-bottom:5px}
+.ht-mini:nth-child(1){left:6%;top:12%} .ht-mini:nth-child(2){right:7%;top:10%} .ht-mini:nth-child(3){left:4%;bottom:14%} .ht-mini:nth-child(4){right:5%;bottom:16%} .ht-mini:nth-child(5){left:30%;bottom:6%} .ht-mini:nth-child(6){right:30%;bottom:5%}
+.ht-tv{position:relative;width:min(70%,560px);border:12px solid #111;border-bottom-width:22px;border-radius:10px;box-shadow:0 10px 50px rgba(0,0,0,.8)}
+.ht-tv img{display:block;width:100%} .ht-tv span{position:absolute;left:50%;bottom:-20px;transform:translateX(-50%);font-size:11px;color:var(--dim)}
+.ht-fan{position:relative;width:min(70vw,420px);height:min(34vh,260px);align-self:flex-end;margin-bottom:4%}
+.ht-cb{position:absolute;left:50%;bottom:0;width:min(11vh,15vw);aspect-ratio:2/3;margin-left:calc(min(11vh,15vw) / -2);border:3px solid #e0a24a;border-radius:8px;background:#1a1f2e center/cover;transform:rotate(var(--a));transform-origin:50% 140%;box-shadow:0 6px 18px rgba(0,0,0,.6)}
+.ht-rise{position:absolute;left:50%;bottom:45%;font-family:var(--serif);font-size:clamp(18px,3vh,30px);text-shadow:0 2px 8px #000;opacity:0}
+.ht-flip{position:relative;width:min(26vh,44vw);aspect-ratio:2/3;transform-style:preserve-3d}
+.ht-face{position:absolute;inset:0;border:4px solid #e0a24a;border-radius:12px;backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:10px}
+.ht-back{background:#1a1f2e center/cover}
+.ht-front{background:radial-gradient(circle at 50% 35%,#2b3550,#121726);transform:rotateY(180deg)}
+.ht-front b{font-family:var(--serif);font-weight:400;font-size:clamp(24px,4vh,40px)} .ht-front small{color:var(--dim)}
+.ht-rc{position:relative;display:flex;gap:12px;align-items:center;background:rgba(15,19,32,.95);border:1px solid var(--line);border-radius:14px;padding:14px 18px;width:min(86%,420px);text-align:left}
+.ht-phone .ht-rc{width:auto;padding:10px;margin-top:30%}
+.ht-rc .seal{flex:none} .ht-rc small{display:block;color:var(--dim)}
+.ht-rc-open{position:absolute;inset:0;border-radius:14px;background:#1c2438;display:flex;flex-direction:column;justify-content:center;padding:12px 18px;opacity:0}
+.ht-rc-open b{font-family:var(--serif);font-weight:400;font-size:22px}
+.ht-ring{position:relative;width:min(44vh,70vw);aspect-ratio:1;border-radius:50%;border:6px solid #e0a24a;overflow:hidden;background:radial-gradient(circle at 50% 46%,#1c2438,#090c14);box-shadow:0 0 40px rgba(0,0,0,.8)}
+.ht-mf{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0}
+.ht-dawn .ht-mf{opacity:1}
+.ht-row4{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.ht-card{text-align:center}
+.ht-board{background:rgba(10,13,22,.92);border:1px solid var(--line);border-radius:14px;padding:12px 18px;width:min(90%,440px)}
+.ht-board h2{margin:0 0 4px}
+.ht-title{font-family:var(--serif);font-size:clamp(34px,7vh,70px);color:var(--parch);text-shadow:0 4px 24px #000;text-align:center}
+.ht-end{text-align:center}
 .hidden{display:none!important}
 </style></head><body>
 <div class="app">
@@ -291,6 +353,7 @@ body.crier .risename{font-size:5.5vh}
 <div class="list" id="open-games"></div>
 <div id="my-games"></div>
 <div class="row" style="flex-wrap:nowrap"><input id="in-code" maxlength="6" placeholder="Enter code" aria-label="Game code" style="text-transform:uppercase"><button class="btn" data-act="joincode">Join</button></div>
+<div class="row"><button class="btn small" data-act="howto">How to Play</button><button class="btn small" data-act="howto-rules">Rules</button></div>
 <div class="row"><button class="btn small" data-act="crier-join">Join as Town Crier</button><span class="note">For a TV or big screen everyone can see. No name needed.</span></div>
 <p class="err" id="home-err"></p>
 <p class="note" id="mocknote"></p>
@@ -305,6 +368,7 @@ body.crier .risename{font-size:5.5vh}
 <div id="deal"></div>
 <div id="panel"></div>
 <div id="seeall"></div>
+<div id="exitbar"></div>
 </section>
 </div></div>
 <div id="crier"></div>
@@ -312,6 +376,9 @@ body.crier .risename{font-size:5.5vh}
 <div id="intro" class="hidden" aria-hidden="true"></div>
 <div id="reveal" class="overlay hidden" data-act="dismiss-reveal"></div>
 <div id="finale" class="overlay finale hidden"></div>
+<div id="splash" class="hidden"><div class="sp-inner"><h1 class="sp-title">Howlertown</h1><p class="sp-tag">Evil lurks among the peaceful. But who…</p>
+  <div class="sp-btns"><button class="btn sp-btn" data-act="howto">How to Play</button><button class="btn pri sp-btn" data-act="splash-start">Start</button></div></div></div>
+<div id="howto" class="hidden" role="dialog" aria-label="How to play"></div>
 <script type="module">
 // ============================================================================
 // HOWLERTOWN — light build v0.1
@@ -1965,7 +2032,7 @@ function renderLobby(){
         <div class="row"><button class="btn small" data-act="fillbots">Fill to 7</button><button class="btn small" data-act="clearbots">Remove all bots</button></div>` : ''}`) : ''}
     ${warns.map(w => `<p class="warn">${esc(w)}</p>`).join('')}
     ${host ? `<div class="row"><button class="btn pri full" data-act="start" ${list.length < MIN_PLAYERS ? 'disabled' : ''}>Start the game</button></div>` : ''}
-    <div class="row"><button class="btn small" data-act="leave">Leave game</button>${isCreator(game) ? `<button class="btn small blood" data-act="delgame" data-code="${esc(code)}">Delete game</button>` : ''}</div>`);
+    <div class="row exitrow"><button class="btn small" data-act="howto-rules">Rules</button><button class="btn small" data-act="leave">Leave game</button>${isCreator(game) ? `<button class="btn small blood" data-act="delgame" data-code="${esc(code)}">Delete game</button>` : ''}</div>`);
 }
 
 // ---- 16. ARTWORK: medallions, death reveals, player status, win overlays, live scenes ----
@@ -2217,7 +2284,7 @@ function renderBannerScene(){
   setHTML('bannerScene', sceneSVG(BANNER_VB(), false));
 }
 // The phone banner crops to a strip of the painting; the Crier shows all of it.
-function BANNER_VB(){ return crier ? '0 0 1280 720' : '0 170 1280 550'; }
+function BANNER_VB(){ return crier || document.body.classList.contains('splash') ? '0 0 1280 720' : '0 170 1280 550'; }
 
 // Wolves can win with villagers still alive (at parity): say why, so it doesn't feel cut short.
 const PARITY_NOTE = '(Wolves now equal villagers, so they win every vote.)';
@@ -2474,8 +2541,9 @@ function renderGame(){
       (w === 'village' && game.foolWon ? `<p class="warn">The village hanged the Fool, so its victory earns no points.</p>` : '') +
       `<div class="list">${order.map(u => { const r = game.revealed?.[u];
         return `<div class="pl${isAlive(u) ? '' : ' dead'}"><span>${esc(nameOf(u))}<br><span class="sub ${r === 'werewolf' ? 'wolfc' : ''}">${esc(roleName(r))}${isAlive(u) ? '' : ', dead'}</span></span><span class="marks"><span class="pts">+${pts[u] || 0}</span><span class="mk" title="Total">${players()[u].score || 0}</span></span></div>`; }).join('')}</div>` +
-      `<div class="row">${w !== 'none' ? '<button class="btn" data-act="finale-scores">Final scores</button>' : ''}${host ? '<button class="btn pri" data-act="relobby">Back to the lobby</button>' : ''}<button class="btn" data-act="leave">Leave</button></div>` +
-      recapHTML();
+      recapHTML() +
+      // The buttons come last, under "How it happened" (owner: ways out at the very bottom).
+      `<div class="row exitrow">${w !== 'none' ? '<button class="btn" data-act="finale-scores">Final scores</button>' : ''}${host ? '<button class="btn pri" data-act="relobby">Back to the lobby</button>' : ''}<button class="btn" data-act="leave">Leave</button></div>`;
   } else if(ph.name === 'deal'){
     const drawn = uids().filter(u => ph.picks?.[u]).length, total = uids().length;
     panel = allDrawn(ph)
@@ -2498,10 +2566,12 @@ function renderGame(){
   // Host bar
   const away = !host && game.status === 'playing' && game.hostBeat && now() - game.hostBeat > 20000;
   setHTML('hostbar', host && game.status === 'playing'
-    ? `<button class="btn small${gameSetOpen ? ' pri' : ''}" data-act="gset">Settings</button>${s.test.on ? `<button class="btn small" data-act="back" ${backStack.length ? '' : 'disabled'}>Back</button>` : ''}${ph.name === 'deal' ? (s.test.on && !allDrawn(ph) ? '<button class="btn small" data-act="skip">Skip ahead</button>' : '') : `<button class="btn small" data-act="pause">${ph.pausedAt ? 'Resume' : 'Pause'}</button><button class="btn small" data-act="skip" ${ph.pausedAt ? 'disabled' : ''}>Skip ahead</button>`}<button class="btn small blood" data-act="endgame">End game</button>`
-    : (away ? `<button class="btn small pri" data-act="takehost">The host seems to be away. Take over as host</button>` : '') +
-      // Any other player may step away mid-game: a bot plays for them in secret until they come back.
-      (game.status === 'playing' && players()[myUid] ? `<button class="btn small" data-act="standin">Leave (bot stand-in)</button>` : ''));
+    ? `<button class="btn small${gameSetOpen ? ' pri' : ''}" data-act="gset">Settings</button>${s.test.on ? `<button class="btn small" data-act="back" ${backStack.length ? '' : 'disabled'}>Back</button>` : ''}${ph.name === 'deal' ? (s.test.on && !allDrawn(ph) ? '<button class="btn small" data-act="skip">Skip ahead</button>' : '') : `<button class="btn small" data-act="pause">${ph.pausedAt ? 'Resume' : 'Pause'}</button><button class="btn small" data-act="skip" ${ph.pausedAt ? 'disabled' : ''}>Skip ahead</button>`}`
+    : (away ? `<button class="btn small pri" data-act="takehost">The host seems to be away. Take over as host</button>` : ''));
+  // Ways out sit at the very bottom of the screen (owner, 2026-10-07): End game for the host; for everyone else,
+  // Leave (bot stand-in), where a bot plays for them in secret until they come back. Plus the rules, for reference.
+  setHTML('exitbar', game.status !== 'playing' ? '' : `<div class="row exitrow"><button class="btn small" data-act="howto-rules">Rules</button>` +
+    (host ? `<button class="btn small blood" data-act="endgame">End game</button>` : players()[myUid] ? `<button class="btn small" data-act="standin">Leave (bot stand-in)</button>` : '') + `</div>`);
   setHTML('gamesettings', host && game.status === 'playing' && gameSetOpen ? gameSettingsHTML() : '');
   // All-seeing view (Test mode, host only)
   if(host && s.test.on && s.test.allSeeing && game.status === 'playing'){
@@ -2864,6 +2934,17 @@ document.addEventListener('click', async e => {
       case 'snd-open': soundOpen = true; return renderSoundUI();
       case 'snd-close': soundOpen = false; return renderSoundUI();
       case 'gset': gameSetOpen = !gameSetOpen; return render();
+      // Splash screen and How to Play (the walkthrough plays only when someone asks for it)
+      case 'splash-start': return endSplash();
+      case 'howto': return openHowTo('watch');
+      case 'howto-rules': return openHowTo('rules');
+      case 'howto-close': return closeHowTo();
+      case 'ht-tab': { const tab = el.dataset.tab; if(tab === htState.tab) return; htPause(); htState.tab = tab; renderHowTo(); if(tab === 'watch') htPlay(htState.i); return; }
+      case 'ht-toggle': return htState.playing ? htPause() : htPlay(htState.i >= HT_BEATS.length - 1 ? 0 : htState.i);
+      case 'ht-prev': return htPlay(htState.i - 1);
+      case 'ht-next': return htPlay(Math.min(HT_BEATS.length - 1, htState.i + 1));
+      case 'ht-restart': return htPlay(0);
+      case 'ht-start': closeHowTo(); return endSplash();
       case 'sec': { const k = el.dataset.sec; lobbyOpen.has(k) ? lobbyOpen.delete(k) : lobbyOpen.add(k); return renderLobby(); }
       case 'snd-unlock': await audio()?.resume(); return render();
       case 'snd-test': testChime(); soundCaption('Test chime'); return;
@@ -2960,6 +3041,197 @@ function fitTagline(){
 addEventListener('resize', fitTagline);
 if(document.fonts) document.fonts.ready.then(fitTagline);
 
+// ---- 14b. SPLASH SCREEN AND HOW TO PLAY ------------------------------------------------
+// First visit on a device: the night village fills the screen, with all its animations, and two buttons.
+function showSplash(){
+  document.body.classList.add('splash'); $('splash').classList.remove('hidden');
+  document.querySelector('.banner svg').setAttribute('viewBox', BANNER_VB()); setScene('night');
+}
+function endSplash(){
+  ls.set('howlertown_splash_seen', '1'); $('splash').classList.add('hidden');
+  if(!document.body.classList.contains('splash')) return;
+  document.body.classList.remove('splash'); document.querySelector('.banner svg').setAttribute('viewBox', BANNER_VB());
+  showHome();
+}
+
+// The rules, for quick reference (from Howlertown_How_to_Play_storyboard.md, Part 1, agreed with the owner).
+const RULES_HTML = `
+<h3>Overview</h3><p>Howlertown is an in-person social game, often known as Werewolf or Mafia. Everyone is in the same room and talks out loud. Each player uses their own phone, which stops the tells and peeking common in the card version. The app narrates and runs every phase. One player is also the host, who sets up the game and can pause, skip ahead or change the timers mid-game.</p>
+<h3>Setup</h3><p>Two teams: werewolves against villagers. Roles are dealt in secret: each player taps a face-down card to draw theirs, and only they see it.</p>
+<h3>Goal</h3><p>The werewolves try to kill one villager each night. The village tries to hang one suspect each day. Can the village hang every wolf before the wolves take over?</p>
+<h3>Roles</h3><p>Up to six roles. Every card is secret: nobody knows who anyone else is. The host chooses which special roles are in play in the game settings.</p>
+<ul><li><b>Werewolf</b>: an ordinary villager by day, who turns wolf-like and vicious at night. The wolves know who the other wolves are, and agree on one victim each night.</li>
+<li><b>Seer</b>: may check one player each night, and learns whether they are a werewolf.</li>
+<li><b>Witch</b>: two potions, each usable once a game: one saves the wolves' victim that night; the other poisons any player (ideally a wolf).</li>
+<li><b>Doctor</b>: each night, protects one player (themselves included) from the wolves.</li>
+<li><b>Town Fool</b>: so disturbed he wants to be hanged. If the village hangs him, the Fool wins.</li>
+<li><b>Villager</b>: only power is voting. Villagers come in several characters (a baker, a woodcutter, a farmer…). In the square, everyone appears as one of these villagers, so a face never gives away a role.</li></ul>
+<h3>A round: night, then day</h3><ul>
+<li><b>Night.</b> The wolves vote in secret on a victim and must all agree before their timer ends, or nobody dies. The Seer, Witch and Doctor use their powers if they choose. Everyone else answers silly questions on their phone, so at a glance every phone looks busy and nobody can easily tell who has a power.</li>
+<li><b>Dawn.</b> The village learns who died in the night. Depending on the host's settings, the dead player's role may be revealed.</li>
+<li><b>Day.</b> The village debates who the wolves are. With accusations: a player accuses someone and makes their case, then the accused answers, each on a timer. Or the host can choose open discussion instead.</li>
+<li><b>The vote.</b> Everyone votes to hang one player. Whoever gets the most votes hangs. A tie at the top leads to a runoff between the tied names; if the runoff ties too, nobody hangs. Votes stay secret until the vote closes, then everyone sees who voted for whom (or just the counts, if votes are anonymous).</li>
+<li><b>The hanging.</b> The hanged player first appears as a plain villager. After the trapdoor, their true face and role are revealed (if the host reveals roles).</li></ul>
+<h3>How the game ends</h3><ul>
+<li><b>The village wins</b> when every wolf is dead.</li>
+<li><b>The wolves win</b> when they equal the villagers in number, since they would then win any vote. (By default the game carries on while the Witch still has her poison, since she could still turn it around; the host can change this.)</li>
+<li><b>The Town Fool wins</b> if the village hangs him. Depending on the host's setting, the game then either ends with the Fool's win or carries on until the village or the wolves also triumph. If the village goes on to win after hanging the Fool, it scores no points: it was fooled.</li></ul>
+<h3>The Town Crier</h3><p>A big screen (a TV or computer) that joins the game as a viewer, not a player, so everyone, players and onlookers, can watch the village and its events. When a Town Crier is connected, the sound plays there.</p>
+<h3>The dead stay silent</h3><p>Once you're dead, you may watch, but don't talk, hint or react: you know things the living don't.</p>
+<h3>Leaving</h3><p>If you need to step away mid-game, "Leave (bot stand-in)" lets a bot quietly play your character until you return on the same phone, using the game code shown at the top of the screen.</p>
+<h3>Etiquette</h3><p>The game is equal parts talk and paranoia. Keep your card hidden. Accuse and argue in ways that keep you alive: the loudest and the silent both tend to look suspicious.</p>`;
+
+// ---- The walkthrough: the owner's storyboard, acted out with the game's own art ----
+// Each beat: chapter, what's on screen (scene), and the narrator's line. Plays only when someone taps How to Play.
+const HT_NAMES = ['Ash','Ben','Marta','Sarah','Mike','Rosie','Pat'];
+const HT_CHAPTERS = ['Welcome','The deal','The roles','A night','Dawn','The day','The vote and the hanging','How it ends','Tips'];
+const htPaint = k => $({ night:'imN', dawn:'imA', day:'imD' }[k]).getAttribute('href');
+function htCrowd(n, g = 'day', hi = -1){
+  return SLOTS.crowd.slice(0, n).map(([x, y], i) => ({ y, m: (i === hi ? `<ellipse cx="${x * S}" cy="${y * S - 4}" rx="34" ry="12" fill="none" stroke="#e0a24a" stroke-width="4" opacity=".9"/>` : '') +
+    figure(['villager1','villager2','villager3','villager4'][i % 4], 'front', x, y, { grade:g, flip: i % 2 === 1 }) })).sort((a, b) => a.y - b.y).map(f => f.m).join('');
+}
+const htBody = (art, i = 0, blood = true) => { const [x, y] = SLOTS.front[i]; return figure(art, 'side', x, y, { grade:'dawn', fallen:true, pose:1, rot:-90, blood, scale: art === 'wolf' ? 1.25 : 1 }); };
+const htList = (names, o = {}) => `<div class="list">${names.map(n => { const m = typeof o.mark === 'function' ? o.mark(n) : o.mark;
+  return `<div class="pl${o.sel === n ? ' sel' : ''}"><span>${n}</span><span class="marks">${m ? `<span class="mk">${m}</span>` : ''}</span></div>`; }).join('')}</div>`;
+const htPhone = inner => `<div class="ht-phone"><div class="ht-screen">${inner}</div></div>`;
+const htMed = (art, name, dead) => medallion('ht-' + art, { size:'min(30vh,52vw)', art, rim: dead ? 'red' : 'gold', name, bg:'#2b3a55' });
+const htTitle = t => `<div class="ht-title">${t}</div>`;
+// Shared little animations (Web Animations; each beat's run() gets the stage and a live() check).
+const htAnim = (el, kf, ms, delay = 0) => el && el.animate(kf, { duration: ms, delay, fill:'both', easing:'ease-in-out' });
+const HT_BEATS = [
+  // 1 Welcome
+  { ch:0, bg:'night', t:'Welcome to Howlertown. A quiet village… with a problem.' },
+  { ch:0, bg:'night', card: () => `<div class="ht-phones">${HT_NAMES.slice(0, 6).map(n => `<div class="ht-mini"><span>${n}</span></div>`).join('')}</div>`,
+    run: st => st.querySelectorAll('.ht-mini').forEach((m, i) => htAnim(m, [{ opacity:0, transform:'scale(.6)' }, { opacity:1, transform:'scale(1)' }], 500, i * 300)),
+    t:'Gather your friends in one room. Each of you plays on your own phone.' },
+  { ch:0, bg:'night', card: () => `<div class="ht-tv"><img src="${htPaint('night')}" alt=""><span>Town Crier</span></div>`,
+    run: st => htAnim(st.querySelector('.ht-tv'), [{ opacity:0, transform:'scale(.8)' }, { opacity:1, transform:'scale(1)' }], 800),
+    t:'A big screen, the Town Crier, lets everyone watch the village together.' },
+  // 2 The deal
+  { ch:1, bg:'night', svg: () => { const [x, y] = SLOTS.foolStand[0]; return figure('wolf', 'howl', x, y + 20, { grade:'night', scale:1.4 }); },
+    card: () => `<div class="ht-fan">${[-24,-12,0,12,24].map(a => `<div class="ht-cb" style="--a:${a}deg;background-image:url(${ART.wolf.portrait})"></div>`).join('')}${['Ash','Ben','Marta'].map(n => `<span class="ht-rise">${n}</span>`).join('')}</div>`,
+    run: (st, live) => st.querySelectorAll('.ht-rise').forEach((r, i) => { htAnim(r, [{ opacity:0, transform:'translate(-50%,0)' }, { opacity:1, offset:.06 }, { opacity:1, offset:.8 }, { opacity:0, transform:'translate(-50%,-150px)' }], 2000, 600 + i * 900);
+      setTimeout(() => { if(live()) htSfx('cardHowl'); }, 600 + i * 900); }),
+    t:'Fate deals the roles. Each of you taps a card…' },
+  { ch:1, bg:'night', card: () => `<div class="ht-flip"><div class="ht-face ht-back" style="background-image:url(${ART.wolf.portrait})"></div><div class="ht-face ht-front"><b>Seer</b><small>Check one player each night</small></div></div>`,
+    run: st => htAnim(st.querySelector('.ht-flip'), [{ transform:'rotateY(0)' }, { transform:'rotateY(180deg)', offset:.2 }, { transform:'rotateY(180deg)', offset:.75 }, { transform:'rotateY(0)' }], 3200, 300),
+    t:'…glimpses it, and tells no one.' },
+  { ch:1, bg:'night', card: () => `<div class="ht-rc"><span class="seal">?</span><span><b>Your card</b><small>Tap to flip it over. Keep it hidden.</small></span><span class="ht-rc-open"><b>Seer</b><small>Your visions: Night 1, Ben: not a wolf.</small></span></div>`,
+    run: st => { const o = st.querySelector('.ht-rc-open'); htAnim(o, [{ opacity:0 }, { opacity:1, offset:.2 }, { opacity:1, offset:.8 }, { opacity:0 }], 3600, 500); },
+    t:'You can check your card any time. Keep it hidden.' },
+  // 3 The roles
+  { ch:2, bg:'night', card: () => htMed('wolf', 'Werewolf'), t:'The werewolves look like everyone else by day. At night, they hunt.' },
+  { ch:2, bg:'night', card: () => htMed('seer', 'Seer'), t:'The Seer may check one player each night: wolf, or not.' },
+  { ch:2, bg:'night', card: () => htMed('witch', 'Witch'), t:'The Witch has two potions: one to save the wolves’ victim, one to poison anyone.' },
+  { ch:2, bg:'night', card: () => htMed('doctor', 'Doctor'), t:'The Doctor protects one player each night.' },
+  { ch:2, bg:'night', card: () => htMed('fool', 'Town Fool'), t:'The Town Fool wants to be hanged. If you hang him, he wins.' },
+  { ch:2, bg:'day', card: () => `<div class="ht-row4">${['villager1','villager2','villager3','villager4'].map(a => medallion('ht-' + a, { size:'min(17vh,21vw)', art:a, rim:'gold', bg:'#2b3a55' })).join('')}</div>`,
+    t:'Everyone else is a villager, with no power but their vote… and their voice.' },
+  { ch:2, bg:'day', svg: () => htCrowd(7), t:'In the square, everyone looks like a villager. A face gives nothing away.' },
+  // 4 A night
+  { ch:3, bg:'night', card: () => `<div class="ht-ring">${['villager1','seer','villager3','villager2'].map(a => `<img class="ht-mf" src="${ART[a].portrait}" alt="">`).join('')}<img class="ht-mf" src="${ART.wolf.portrait}" alt=""><img class="ht-mf" src="${ART.wolf.howlPortrait || ART.wolf.portrait}" alt=""></div>`,
+    run: (st, live) => { const f = st.querySelectorAll('.ht-mf'), n = f.length;
+      f.forEach((im, i) => { if(i < n - 2) htAnim(im, [{ opacity:0, filter:'blur(0)' }, { opacity:.45, filter:'blur(0)', offset:.15 }, { opacity:.45, filter:'blur(10px)' }], 3600 - i * 700, i * 700); });
+      htAnim(f[n - 2], [{ opacity:0, filter:'blur(12px)' }, { opacity:1, filter:'blur(0)' }], 1200, 2900);
+      htAnim(f[n - 1], [{ opacity:0, transform:'scale(1)' }, { opacity:1, transform:'scale(1.1)' }, { opacity:1, transform:'scale(1.04)' }], 900, 4300);
+      htAnim(st.querySelector('.ht-ring'), [{ borderColor:'#e0a24a' }, { borderColor:'#b3352a' }], 400, 4300);
+      setTimeout(() => { if(live()) htSfx('cardHowl'); }, 4300); },
+    min: 6000, t:'Night falls. Your neighbours may not be who they seem…' },
+  { ch:3, bg:'night', card: () => htPhone(`<h2>Choose tonight’s victim</h2><p class="hint">Sasha must agree with you, or nobody dies.</p>${htList(HT_NAMES.slice(1, 6), { sel:'Marta' })}`),
+    t:'The wolves agree on a victim. All of them must agree, or no one dies.' },
+  { ch:3, bg:'night', card: () => `<div class="ht-trio">${htPhone(`<h2>Whose true nature will you see?</h2>${htList(['Ash','Ben','Marta'], { mark: n => n === 'Ben' ? 'No' : '' })}`)}${htPhone(`<h2>Whom will you protect tonight?</h2>${htList(['Ash','Ben','Marta'], { sel:'Marta' })}`)}${htPhone(`<h2>Poison someone?</h2>${htList(['Ash','Ben','Marta'])}`)}</div>`,
+    t:'The Seer, the Doctor and the Witch use their powers in secret.' },
+  { ch:3, bg:'night', card: () => htPhone(`<h2>Who would the crows pick first?</h2><p class="hint">Pick anyone. The village is choosing too.</p>${htList(HT_NAMES.slice(0, 5), { sel:'Mike', mark: n => n === 'Mike' ? 'You' : '' })}`),
+    t:'Everyone else answers silly questions, so every phone looks busy. No one can tell who is doing what.' },
+  // 5 Dawn
+  { ch:4, bg:'dawn', svg: () => htCrowd(6, 'dawn'),
+    card: () => `<div class="ht-ring ht-dawn"><img class="ht-mf" src="${ART.villager3.portrait}" alt=""><img class="ht-mf" src="${ART.wolf.portrait}" alt=""></div>`,
+    run: (st, live) => { const f = st.querySelectorAll('.ht-mf'); htAnim(f[1], [{ opacity:1, filter:'blur(0)' }, { opacity:0, filter:'blur(12px)' }], 2200, 300);
+      htAnim(st.querySelector('.ht-dawn'), [{ opacity:1 }, { opacity:1, offset:.6 }, { opacity:0 }], 3800);
+      htSfx('snarl'); setTimeout(() => { if(live()) htSfx('rooster'); }, 2600); },
+    min: 4500, t:'The sun rises… and the village counts its dead.' },
+  { ch:4, bg:'dawn', svg: () => htCrowd(6, 'dawn') + htBody('witch', 0),
+    card: () => `<div class="ht-card">${htMed('witch', 'Marta', true)}<div class="reveal-line">Marta was the Witch.</div></div>`,
+    run: () => htSfx('deathReveal'), t:'Marta did not survive the night. Her role may be revealed… or kept secret, as the host chooses.' },
+  { ch:4, bg:'dawn', svg: () => htCrowd(7, 'dawn'), run: () => htSfx('noDeath'), t:'Some mornings, everyone wakes. The danger has not passed.' },
+  // 6 The day
+  { ch:5, bg:'day', svg: () => htCrowd(7), t:'The village gathers. Who is the wolf?' },
+  { ch:5, bg:'day', svg: () => htCrowd(7), card: () => `<div class="ht-trio">${htPhone(`<h2>Accuse someone</h2><p class="hint">Round 1 of 2. The first accusation takes the floor.</p>${htList(['Ben','Marta','Sarah','Mike'], { mark:'Accuse', sel:'Ben' })}`)}<div class="ht-note"><b>Ash accuses Ben.</b><span>Ash makes the case: 0:20</span></div></div>`,
+    t:'One player accuses another and makes their case…' },
+  { ch:5, bg:'day', svg: () => htCrowd(7), card: () => `<div class="ht-note"><b>Ben, defend yourself.</b><span>Ben answers: 0:20</span></div>`,
+    t:'…then the accused answers. Talk out loud, argue, and watch faces.' },
+  // 7 The vote and the hanging
+  { ch:6, bg:'day', svg: () => htCrowd(7), card: () => `<div class="ht-trio">${htPhone(`<h2>Who hangs today?</h2><p class="hint">5 of 7 have voted.</p>${htList(['Ash','Ben','Marta','Sarah'], { sel:'Ben' })}`)}<div class="ht-note"><b>The vote</b><span>5 of 7 have voted.</span></div></div>`,
+    run: () => htSfx('bell'), t:'The bell rings. Everyone votes, in secret.' },
+  { ch:6, bg:'day', svg: () => htCrowd(7), card: () => `<div class="ht-board"><h2>How the village voted</h2>
+      <div class="vgroup vtop"><b><span>Ben</span><span class="cnt">4 votes</span></b><p>Ash, Marta, Rosie, Sarah</p></div>
+      <div class="vgroup"><b><span>Mike</span><span class="cnt">2 votes</span></b><p>Ben, Pat</p></div><p class="hint">Abstained: Mike</p></div>`,
+    t:'Whoever gets the most votes hangs. A tie means a runoff; another tie, and no one hangs.' },
+  { ch:6, bg:'day', svg: () => htCrowd(6) + htBody('villager3', 0, false), card: () => `<div class="ht-card">${htMed('villager3', 'Ben', true)}<div class="reveal-line">The village has hanged Ben.</div></div>`,
+    run: (st, live) => { htSfx('gavel'); setTimeout(() => { if(live()) htSfx('trapdoor'); }, 1500); }, t:'The village has chosen Ben.' },
+  { ch:6, bg:'day', svg: () => htCrowd(6) + htBody('wolf', 0, false),
+    card: () => `<div class="ht-card"><div class="xfade diff">${htMed('wolf', 'Ben', true)}<div class="xf-top">${htMed('villager3', 'Ben', true)}</div></div><div class="reveal-line">The village has hanged Ben.</div><div class="reveal-role xf-in">A Werewolf</div></div>`,
+    min: 4600, t:'And then the truth. Ben was a Werewolf.' },
+  // 8 How it ends
+  { ch:7, bg:'day', svg: () => htCrowd(5), card: () => htTitle('The village wins'), run: () => htSfx('villageWin'), t:'Hang every wolf, and the village wins.' },
+  { ch:7, bg:'night', svg: () => SLOTS.wolfStand.slice(0, 2).map(([x, y]) => figure('wolf', 'front', x, y, { grade:'night', scale:1.4 })).join(''), card: () => htTitle('The wolves win'),
+    run: () => htSfx('howlLoud'), t:'But if the wolves equal the villagers, Howlertown belongs to the wolves.' },
+  { ch:7, bg:'dawn', svg: () => { const [x, y] = SLOTS.foolStand[0]; return figure('fool', 'front', x, y + 40, { grade:'dawn', scale:1.2 }); }, card: () => htTitle('The Town Fool wins'),
+    run: () => htSfx('foolWin'), t:'And if you hang the Fool… the joke is on you.' },
+  // 9 Tips
+  { ch:8, bg:'night', card: () => htPhone(`<div class="ht-rc"><span class="seal">?</span><span><b>Your card</b><small>Tap to flip it over. Keep it hidden.</small></span></div>`), t:'Keep your card hidden. Never show your phone.' },
+  { ch:8, bg:'day', svg: () => htCrowd(7, 'day', 2), t:'The loudest, and the silent, both look suspicious. Choose your words carefully.' },
+  { ch:8, bg:'night', card: () => `<div class="ht-end">${htTitle('Howlertown')}<div class="row" style="justify-content:center"><button class="btn" data-act="ht-restart">Play again</button><button class="btn pri" data-act="ht-start">Start</button></div></div>`,
+    t:'That’s Howlertown. Good luck… and sleep with one eye open.' },
+];
+let htState = { i:0, tok:0, playing:false, tab:'watch' }, htNodes = [];
+// Sound effects in the walkthrough play on this device, following its Sound panel switches.
+async function htSfx(slot){
+  const s = SOUNDS[slot]; if(!s || !soundPrefs[s.cat]) return;
+  const c = audio(); if(!c) return; if(c.state !== 'running') await c.resume().catch(() => {});
+  const buf = await loadBuffer(s.files[0]); if(!buf || !htState.playing) return;
+  const src = c.createBufferSource(), g = c.createGain(); src.buffer = buf; g.gain.value = s.vol || 1; src.connect(g); g.connect(master); src.start(); htNodes.push(src);
+}
+const htStopSounds = () => { htNodes.forEach(n => { try{ n.stop(); }catch{} }); htNodes = []; };
+function openHowTo(tab){
+  htState.tab = tab; $('howto').classList.remove('hidden'); document.body.classList.add('howto-open');
+  renderHowTo();
+  if(tab === 'watch'){ let ch = +(ls.get('howlertown_howto_ch') || 0); if(ch >= HT_CHAPTERS.length - 1) ch = 0; htPlay(HT_BEATS.findIndex(b => b.ch === ch)); }
+}
+function closeHowTo(){ htPause(); $('howto').classList.add('hidden'); $('howto').innerHTML = ''; document.body.classList.remove('howto-open'); }
+function renderHowTo(){
+  const w = htState.tab === 'watch';
+  $('howto').innerHTML = `<div class="ht-head"><b>How to Play</b><div class="ht-tabs"><button class="btn small${w ? ' pri' : ''}" data-act="ht-tab" data-tab="watch">Watch</button><button class="btn small${w ? '' : ' pri'}" data-act="ht-tab" data-tab="rules">Rules</button></div><button class="btn small" data-act="howto-close" aria-label="Close">Close</button></div>` +
+    (w ? `<div class="ht-stage" id="ht-stage"></div><p class="ht-cap" id="ht-cap" aria-live="polite"></p>
+      <div class="ht-ctrl"><button class="btn small" data-act="ht-prev" aria-label="Previous">⏮</button><button class="btn small pri" data-act="ht-toggle" id="ht-toggle">Pause</button><button class="btn small" data-act="ht-next" aria-label="Next">⏭</button>
+      <select id="ht-ch" aria-label="Chapter">${HT_CHAPTERS.map((c, i) => `<option value="${i}">${i + 1}. ${c}</option>`).join('')}</select><span class="note" id="ht-pos"></span></div>`
+      : `<div class="ht-rules">${RULES_HTML}</div>`);
+}
+function htShow(b){
+  const st = $('ht-stage'); if(!st) return;
+  st.innerHTML = `<svg viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${FIG_DEFS}<image href="${htPaint(b.bg)}" width="1280" height="720"/>${b.svg ? b.svg() : ''}</svg>` +
+    (b.card ? `<div class="ht-over">${b.card()}</div>` : '');
+  $('ht-cap').textContent = capText(b.t);
+  const sel = $('ht-ch'); if(sel) sel.value = b.ch;
+  $('ht-pos').textContent = `${htState.i + 1} / ${HT_BEATS.length}`;
+  ls.set('howlertown_howto_ch', String(b.ch));
+}
+async function htPlay(i){
+  const tok = ++htState.tok, live = () => tok === htState.tok; htStopSounds(); stopSpeech();
+  htState.playing = true; const tg = $('ht-toggle'); if(tg) tg.textContent = 'Pause';
+  for(htState.i = Math.max(0, i); htState.i < HT_BEATS.length; htState.i++){
+    if(!live()) return;
+    const b = HT_BEATS[htState.i]; htShow(b);
+    if(b.run) b.run($('ht-stage'), live);
+    const voice = soundPrefs.narrator && hasSpeech() ? speakLine(b.t, null, live, true) : sleep(sayMs(b.t) - 600);
+    await Promise.all([voice, sleep(b.min || 0)]); if(!live()) return;
+    await sleep(700);
+  }
+  if(live()){ htState.playing = false; htState.i = HT_BEATS.length - 1; const t = $('ht-toggle'); if(t) t.textContent = 'Play'; }
+}
+function htPause(){ htState.tok++; htState.playing = false; stopSpeech(); htStopSounds(); const t = $('ht-toggle'); if(t) t.textContent = 'Play'; }
+document.addEventListener('change', e => { if(e.target.id === 'ht-ch') htPlay(HT_BEATS.findIndex(b => b.ch === +e.target.value)); });
+
 // ---- 15. START ---------------------------------------------------------------------
 (async () => {
   fxInit(); setScene('night');
@@ -2973,6 +3245,7 @@ if(document.fonts) document.fonts.ready.then(fitTagline);
   if(cc){ const g = await DB.get(`${GAMES}/${cc.toUpperCase()}`).catch(() => null); if(fresh(g)) return enterCrier(cc.toUpperCase()); ss.del('howlertown_crier_game'); }
   const saved = ls.get('howlertown_current_game');
   if(saved){ const g = await DB.get(`${GAMES}/${saved}`).catch(() => null); if(fresh(g) && g.players?.[myUid]) return enterGame(saved); ls.del('howlertown_current_game'); }
+  if(!ls.get('howlertown_splash_seen') && !q.get('join')) return showSplash();      // first visit on this device
   showHome();
 })();
 </script></body></html>
