@@ -3460,9 +3460,17 @@ async function htSfx(slot){
   const s = SOUNDS[slot]; if(!s || !soundPrefs[s.cat]) return;
   const c = audio(); if(!c) return; if(c.state !== 'running') await c.resume().catch(() => {});
   const buf = await loadBuffer(s.files[0]); if(!buf || !htState.playing) return;
-  const src = c.createBufferSource(), g = c.createGain(); src.buffer = buf; g.gain.value = s.vol || 1; src.connect(g); g.connect(master); src.start(); htNodes.push(src);
+  const src = c.createBufferSource(), g = c.createGain(), v = s.vol || 1; src.buffer = buf; g.gain.value = v * (htState.talking ? HT_DUCK : 1);
+  src.connect(g); g.connect(master); src.start(); htNodes.push({ src, g, v });
 }
-const htStopSounds = () => { htNodes.forEach(n => { try{ n.stop(); }catch{} }); htNodes = []; };
+// While the narrator speaks, the walkthrough's sounds drop to 20% (owner: they talked over the narrator), and
+// come back up between lines.
+const HT_DUCK = .2;
+function htDuck(on){
+  htState.talking = on; const c = audio(); if(!c) return;
+  for(const n of htNodes){ n.g.gain.cancelScheduledValues(c.currentTime); n.g.gain.setTargetAtTime(n.v * (on ? HT_DUCK : 1), c.currentTime, .12); }
+}
+const htStopSounds = () => { htNodes.forEach(n => { try{ n.src.stop(); }catch{} }); htNodes = []; };
 function openHowTo(tab){
   htState.tab = tab; $('howto').classList.remove('hidden'); document.body.classList.add('howto-open');
   renderHowTo();
@@ -3489,13 +3497,15 @@ function htShow(b){
   ls.set('howlertown_howto_ch', String(b.ch));
 }
 async function htPlay(i){
-  const tok = ++htState.tok, live = () => tok === htState.tok; htStopSounds(); stopSpeech();
+  const tok = ++htState.tok, live = () => tok === htState.tok; htStopSounds(); stopSpeech(); htState.talking = false;
   htState.playing = true; const tg = $('ht-toggle'); if(tg) tg.textContent = 'Pause';
   for(htState.i = Math.max(0, i); htState.i < HT_BEATS.length; htState.i++){
     if(!live()) return;
     const b = HT_BEATS[htState.i]; htShow(b);
     if(b.run) b.run($('ht-stage'), live);
-    const voice = soundPrefs.narrator && hasSpeech() ? speakLine(b.t, null, live, true) : sleep(sayMs(b.t) - 600);
+    const talk = soundPrefs.narrator && hasSpeech();
+    if(talk) htDuck(true);
+    const voice = talk ? speakLine(b.t, null, live, true).finally(() => { if(live()) htDuck(false); }) : sleep(sayMs(b.t) - 600);
     await Promise.all([voice, sleep(b.min || 0)]); if(!live()) return;
     await sleep(700);
   }
