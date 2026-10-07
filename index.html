@@ -126,6 +126,9 @@ legend{padding:0 6px;font-family:var(--serif);font-size:18px}
 .tag{font-size:13px;color:var(--dim);border:1px solid var(--line);border-radius:8px;padding:1px 7px}
 .wolfc{color:var(--rose)}
 table.see{width:100%;border-collapse:collapse;font-size:14px}
+.hb{margin:10px 0 18px}.hb h3{margin:4px 0}.hb-plan{font-weight:600;margin:4px 0}.hb-t td{vertical-align:top}.hb-t th{text-align:left;font-size:12px;opacity:.7}
+.hb-why span{display:block;font-size:12px;opacity:.8}.hb-why .hb-up{color:#e8907f;opacity:1}.hb-why .hb-dn{color:#8fc49a;opacity:1}
+.hb-bar{display:inline-block;width:44px;height:6px;background:rgba(255,255,255,.12);border-radius:3px;margin-right:5px;vertical-align:middle}.hb-bar i{display:block;height:100%;background:#b3352a;border-radius:3px}
 table.see td{padding:5px 4px;border-bottom:1px solid #1f2638}
 :focus-visible{outline:2px solid var(--ember);outline-offset:2px}
 
@@ -370,6 +373,7 @@ body.howto-open{overflow:hidden}
 <div id="deal"></div>
 <div id="panel"></div>
 <div id="seeall"></div>
+<div id="hipb"></div>
 <div id="exitbar"></div>
 </section>
 </div></div>
@@ -597,6 +601,38 @@ const VOICE = {
     'The mob was right… this time. The village wins.', 'The forest is quiet at last. The village wins.'],
   foolEnd: ['The Fool wins. Who is the fool now?', 'They hanged the Fool, just as the Fool wanted. The Fool wins.', 'The Fool grins from the gallows. The Fool wins.',
     'The joke is on Howlertown. The Fool wins.'],
+  // HIPB bots speak for themselves when they accuse (b_…, by the reason that weighs most) and when accused (d_…).
+  // The narrator reads them as: Bram says: "…". {x} is the earlier person in the story, {d} a day number.
+  b_votedInnocent: ['{accused} voted to hang {x}, and {x} was innocent. I don’t forget that.', '{x} was innocent, and {accused} wanted them dead. Explain that.',
+    'Remember {x}? Innocent. And {accused} voted for the rope.', 'Wolves vote to kill the innocent. {accused} voted to kill {x}.'],
+  b_accusedInnocent: ['{accused} pointed at {x} before, and {x} was innocent. Wolves love a scapegoat.', 'The last time {accused} accused someone, it was {x}. Innocent. Why listen now?',
+    '{accused} led us to {x}, and we were wrong. I won’t be led again.'],
+  b_spared: ['When we hanged the wolf {x}, {accused} voted for someone else. Protecting a friend?', '{accused} would not vote for {x}, and {x} was a wolf. Why not?'],
+  b_victimAccused: ['{x} accused {accused}, and that night {x} died. Convenient, isn’t it?', '{x} was onto {accused}. Now {x} is dead.', 'Who wanted {x} silenced? {x} had just accused {accused}.'],
+  b_victimVoted: ['{x} voted against {accused}, and the wolves took {x} that very night.', '{x} wanted {accused} hanged. Then {x} was torn apart. I see a pattern.'],
+  b_votedMe: ['{accused} voted to hang me. I know I’m no wolf, so why did {accused} want me gone?', '{accused} tried to put me on the rope. I want to know why.',
+    'I know what I am. And {accused} still voted to hang me.'],
+  b_accusedMe: ['{accused} accused me, and I am no wolf. That says more about {accused} than about me.', '{accused} came after me. An innocent person would not.',
+    'I know I’m innocent. So {accused} accusing me was no mistake.'],
+  b_seer: ['I am the Seer. I looked at {accused} in the night. {accused} is a wolf.', 'I have kept quiet long enough. I am the Seer, and {accused} is a wolf.',
+    'Hang {accused}. I am the Seer, and I saw the wolf in them.'],
+  // Wolves, whose real reason is something only a wolf could know: vague, personal, deniable.
+  b_cagey: ['I accuse {accused} because I don’t like the way {accused} looks at me.', 'Something about {accused} has felt wrong since the first night.',
+    '{accused} is too calm. Far too calm, for a village full of wolves.', 'I can’t say why. But I would sleep better with {accused} on the rope.',
+    'Watch {accused} when the dead are named. Not a flicker.', '{accused} always seems to know a little too much.'],
+  b_hunch: ['Nobody else will start, so I will. I don’t trust {accused}.', 'Call it a hunch. Something about {accused} is wrong.',
+    'I have nothing solid. But {accused} makes my skin crawl.', 'Someone has to go first. {accused}, prove me wrong.'],
+  d_revenge: ['{accuser} is only accusing me because I voted to hang {accuser} on day {d}. This is revenge, pure and simple.',
+    'I voted against {accuser} once, and now {accuser} wants me dead. Revenge, nothing more.', 'Of course {accuser} points at me. I wanted {accuser} on the rope, and I still do.'],
+  d_accusedInnocent: ['{accuser} already sent us after {x}, and {x} was innocent. Don’t make the same mistake twice.', 'The last time we listened to {accuser}, {x} died innocent.'],
+  d_votedInnocent: ['{accuser} voted to hang {x}, who was innocent. Now {accuser} wants me. See a pattern?', '{accuser} helped hang {x}, an innocent. Am I next on the list?'],
+  d_suspect: ['I would look hard at {accuser} instead. Who gains if I hang?', 'Wolves accuse to save their own skin. Ask yourselves about {accuser}.',
+    'Watch {accuser}. The loudest finger often hides the claws.'],
+  d_seer: ['Of course {accuser} wants me gone. I am the Seer, and {accuser} is a wolf.', 'I am the Seer, and I have seen {accuser} in the night. A wolf, accusing the Seer.'],
+  d_seerClaim: ['Hang me and you hang your Seer. The wolf is {x}, not me.', 'I am the Seer. I have seen {x} for what they are. Hang {x}, not me.'],
+  d_plain: ['I am no wolf. You are wasting the day on me.', 'I have done nothing but hunt the wolves. Hang me and they win.', 'Look at my votes. I have nothing to hide.',
+    'You have the wrong neighbour. The wolves are laughing.'],
+  d_fool: ['Hang me if you like. I have nothing more to say.', 'Do what you must. I won’t beg.', 'Perhaps I am a wolf. Perhaps not. Decide.'],
 };
 // Open discussion has no formal accusations, so it uses only the day lines that don't ask for one.
 VOICE.dayOpen = [3, 5, 6, 7, 9, 10, 11, 14, 15].map(i => VOICE.day[i - 1]);
@@ -1343,8 +1379,10 @@ async function stepDay(ph, t){
   if(ph.floor){
     if(t < ph.floor.endsAt) return;
     if(ph.floor.stage === 'accuser'){
-      const line = draw('accused', { accused: nameOf(ph.floor.accused) }), hold = t + sayMs(line);
-      return upd({ 'phase.floor.stage':'accused', 'phase.floor.say': mkSay([{ t: line }]), 'phase.floor.holdUntil': hold, 'phase.floor.endsAt': hold + d.speak * 1000 });
+      // An accused bot answers for itself (HIPB), and then needs no talking time of its own.
+      const u = ph.floor.accused, bot = hipbBot(u) && isAlive(u);
+      const items = [{ t: draw('accused', { accused: nameOf(u) }) }, ...(bot ? [{ t: `${nameOf(u)} says: "${hipbDefendLine(hipbFacts(), u, ph.floor.accuser)}"` }] : [])], hold = t + scriptMs(items);
+      return upd({ 'phase.floor.stage':'accused', 'phase.floor.say': mkSay(items), 'phase.floor.holdUntil': hold, 'phase.floor.endsAt': hold + (bot ? 2500 : d.speak * 1000) });
     }
     const r = ph.round + 1;
     if(r > s.rounds) return startVote(ph.n, 1, al);
@@ -1476,14 +1514,192 @@ setInterval(hostTick, 600);
 setInterval(() => { if(game && isHost() && game.status !== 'ended') upd({ hostBeat: now() }).catch(() => {}); }, 5000);
 
 // ---- 9. BOTS (Test mode; driven by the host's device) ---------------------------
+// ---- 9b. HIPB: the Howlerville Intelligence Player Bot ---------------------------------------------------
+// Bots (and stand-ins) play rationally, but only on what their own player could know: public events (deaths,
+// revealed roles, accusations, and who voted for whom when votes are public; with anonymous votes only their own
+// vote) plus their own role's secrets (the pack and its targets, their visions, who they guarded, the Witch's view
+// of each night's victim). Never anyone else's secrets, though the host's phone holds them all. Bots can't hear
+// the room, so talk out loud never reaches them.
+// Village-side bots give every living player a chance of being a wolf: evidence weights (HIPB_W) added as log-odds,
+// then scaled so the chances add up to the wolves still at large. Wolves score threat (HIPB_T) instead. Choices are
+// drawn from weights, so bots aren't predictable, but they strongly favour the best option. "Bot brains" (Test mode)
+// shows all of it.
+const HIPB_W = {
+  votedInnocent: .7, votedWolf: -.8, spared: .25,       // voted to hang a revealed innocent / a revealed wolf; voted elsewhere the day a wolf hanged
+  accusedInnocent: .55, accusedWolf: -.9,                // accused someone later revealed innocent / a wolf
+  wolfVoted: -.35, wolfAccused: -.45,                    // a revealed wolf voted for / accused them (wolves pick on villagers)
+  victimAccused: .45, victimVoted: .3,                   // a night victim had accused / voted for them
+  votedMe: .35, accusedMe: .5,                           // they voted for / accused me, and I know I'm innocent
+  targeted: -2.5,                                        // the wolves went for them: the Witch's and the Doctor's private clue
+};
+const HIPB_T = { accusedPack: .7, votedPack: .45, claimSeer: 2.5, survived: -1.2, trusted: 1 };
+const hipbMem = {};                                      // decisions, once made, per bot and moment
+const hipbBot = u => !!(players()[u]?.bot || players()[u]?.standin);
+// Public facts, in order. Night entries are read only for their announced deaths (and, for wolves, the pack's target).
+function hipbFacts(){
+  const g = game.gameNo || 1;
+  const ents = Object.entries(history).filter(([, v]) => v?.gameNo === g).sort(([a], [b]) => a < b ? -1 : 1).map(([, v]) => v);
+  return { s: settingsOf(game), rev: game.revealed || {}, votes: ents.filter(e => e.type === 'vote'), nights: ents.filter(e => e.type === 'night'),
+    acc: Object.values(game.acc || {}).filter(a => a.g === g).sort((x, y) => x.n - y.n || x.r - y.r) };
+}
+// The votes of one round that bot b can see: all of them if votes are public, otherwise just b's own.
+const hipbVotes = (F, e, b) => F.s.votes === 'public' ? (e.votes || {}) : (b && e.votes?.[b] ? { [b]: e.votes[b] } : {});
+// Evidence about player u, as bot b sees it (b = null: what any villager could see).
+function hipbEvidence(F, b, u){
+  const ev = [], R = F.rev, N = nameOf, add = (k, w, txt, x) => ev.push({ k, w, txt, x });
+  for(const e of F.votes){ const V = hipbVotes(F, e, b), c = V[u], day = `day ${e.n}${e.round === 2 ? ' runoff' : ''}`;
+    if(c && c !== 'abstain'){
+      if(R[c] === 'werewolf') add('votedWolf', HIPB_W.votedWolf, `voted for ${N(c)}, a wolf (${day})`, c);
+      else if(R[c]) add('votedInnocent', HIPB_W.votedInnocent * (e.eliminated === c ? 1 : .6), `voted for ${N(c)}, who was innocent (${day})`, c);
+      if(b && c === b) add('votedMe', HIPB_W.votedMe, `voted for me (${day})`, c);
+      if(e.eliminated && R[e.eliminated] === 'werewolf' && c !== e.eliminated) add('spared', HIPB_W.spared, `didn't vote for the wolf ${N(e.eliminated)} (${day})`, e.eliminated);
+    }
+    for(const [w, t] of Object.entries(V)) if(t === u && R[w] === 'werewolf') add('wolfVoted', HIPB_W.wolfVoted, `the wolf ${N(w)} voted for them (${day})`, w);
+  }
+  for(const a of F.acc){
+    if(a.a === u){
+      if(R[a.b] === 'werewolf') add('accusedWolf', HIPB_W.accusedWolf, `accused ${N(a.b)}, a wolf (day ${a.n})`, a.b);
+      else if(R[a.b]) add('accusedInnocent', HIPB_W.accusedInnocent, `accused ${N(a.b)}, who was innocent (day ${a.n})`, a.b);
+      if(b && a.b === b) add('accusedMe', HIPB_W.accusedMe, `accused me (day ${a.n})`, a.b);
+    }
+    if(a.b === u && R[a.a] === 'werewolf') add('wolfAccused', HIPB_W.wolfAccused, `the wolf ${N(a.a)} accused them (day ${a.n})`, a.a);
+  }
+  // Night victims: whoever they had accused or voted for looks guilty (two deaths: half each, one may be the poison).
+  for(const e of F.nights){ const dead = e.deaths || [], f = 1 / (dead.length || 1);
+    for(const d of dead){
+      if(F.acc.some(a => a.a === d && a.b === u && a.n < e.n)) add('victimAccused', HIPB_W.victimAccused * f, `${N(d)} accused them, then died on night ${e.n}`, d);
+      if(F.votes.some(v => v.n < e.n && hipbVotes(F, v, b)[d] === u)) add('victimVoted', HIPB_W.victimVoted * f, `${N(d)} voted for them, then died on night ${e.n}`, d);
+    }
+  }
+  return ev;
+}
+// Chances that each living player is a wolf, for a village-side bot b (or the public view, b = null).
+function hipbSuspicion(F, b){
+  const me = b ? secrets[b] : null, role = me?.role, known = {};
+  if(role === 'seer') for(const v of Object.values(me.seen || {})) if(v?.target && isAlive(v.target)) known[v.target] = v.wolf;
+  const rows = aliveUids().filter(u => u !== b).map(u => {
+    const ev = hipbEvidence(F, b, u);
+    if(role === 'witch') for(const e of F.nights) if(e.wolfTarget === u) ev.push({ k:'targeted', w: HIPB_W.targeted, txt:`the wolves went for them on night ${e.n} (I saw it)` });
+    if(role === 'doctor') for(const e of F.nights) if(me.guarded?.[e.n] === u && !(e.deaths || []).length)
+      ev.push({ k:'targeted', w: HIPB_W.targeted * .6, txt:`nobody died the night I guarded them (night ${e.n}): likely the wolves' target` });
+    if(u in known) ev.unshift({ k:'vision', w: 0, txt: known[u] ? 'I saw it: a wolf' : 'I saw it: not a wolf' });
+    return { u, ev, s: ev.reduce((a, x) => a + x.w, 0) };
+  });
+  const unk = rows.filter(r => !(r.u in known)), W = Math.max(0, Math.min(pubWolves() - Object.values(known).filter(Boolean).length, unk.length));
+  // Scale the log-odds by one shared offset so the chances add up to W (bisection).
+  const sig = x => 1 / (1 + Math.exp(-x)); let lo = -30, hi = 30;
+  for(let i = 0; i < 50; i++){ const c = (lo + hi) / 2; unk.reduce((a, r) => a + sig(c + r.s), 0) > W ? hi = c : lo = c; }
+  for(const r of rows) r.p = r.u in known ? (known[r.u] ? .99 : .01) : Math.min(.99, Math.max(.01, sig(lo + r.s)));
+  return { rows, W, P: Object.fromEntries(rows.map(r => [r.u, r.p])) };
+}
+// A wolf bot's view of the prey: threat (who hunts the pack) and kill value (threat + trust, less any sign that
+// they're protected). It knows the pack's own targets, so a target who survived was guarded or saved.
+function hipbThreat(F, b){
+  const pack = new Set([b, ...(secrets[b]?.pack || [])]), pub = hipbSuspicion(F, null).P;
+  const rows = aliveUids().filter(u => !pack.has(u)).map(u => {
+    const ev = [], add = (k, w, txt) => ev.push({ k, w, txt });
+    for(const a of F.acc) if(a.a === u && pack.has(a.b)) add(a.claim === 'seer' ? 'claimSeer' : 'accusedPack', a.claim === 'seer' ? HIPB_T.claimSeer : HIPB_T.accusedPack,
+      a.claim === 'seer' ? `claimed to be the Seer and named ${nameOf(a.b)} (day ${a.n})` : `accused ${a.b === b ? 'me' : nameOf(a.b)} (day ${a.n})`);
+    for(const e of F.votes){ const c = hipbVotes(F, e, b)[u]; if(pack.has(c)) add('votedPack', HIPB_T.votedPack, `voted for ${c === b ? 'me' : nameOf(c)} (day ${e.n}${e.round === 2 ? ' runoff' : ''})`); }
+    for(const e of F.nights) if(e.wolfTarget === u && !e.wolfFailed && !(e.deaths || []).includes(u))
+      add('survived', HIPB_T.survived, `survived our attack on night ${e.n}: the Doctor guarding themselves, or saved`);
+    const threat = ev.filter(x => x.k !== 'survived').reduce((a, x) => a + x.w, 0), shield = ev.filter(x => x.k === 'survived').reduce((a, x) => a + x.w, 0);
+    const trust = HIPB_T.trusted * (.5 - (pub[u] ?? .5)) * 2;
+    return { u, ev, threat, shield, pub: pub[u] ?? .5, kill: threat + trust + shield };
+  });
+  return { rows, pack, pub };
+}
+// Weighted options, as [{u, w}] with w summing to 1, and a draw from them.
+const hipbNorm = opts => { const t = opts.reduce((a, o) => a + o.w, 0) || 1; return opts.map(o => ({ ...o, w: o.w / t })).sort((x, y) => y.w - x.w); };
+const hipbPick = opts => { let r = Math.random(); for(const o of opts){ if((r -= o.w) <= 0) return o.u; } return opts[0]?.u ?? null; };
+const hipbSoft = (rows, f, k) => hipbNorm(rows.map(r => ({ u: r.u, w: Math.exp(k * f(r)) })));
+// The bot's thinking for this moment: its view of everyone, and its weighted options for the next move.
+function hipbBrain(F, b){
+  const role = secrets[b]?.role, ph = game.phase || {}, wolf = role === 'werewolf';
+  const view = wolf ? hipbThreat(F, b) : hipbSuspicion(F, b), P = wolf ? view.pub : view.P;
+  const out = { b, role, wolf, view, plan: null };
+  if(ph.name === 'night'){
+    const n = ph.n, nt = curNight(n);
+    if(wolf) out.plan = { what:'Kill', opts: hipbSoft(view.rows, r => r.kill, 2) };
+    else if(role === 'seer'){ const seen = new Set(Object.values(secrets[b]?.seen || {}).map(v => v?.target));
+      const rows = view.rows.filter(r => !seen.has(r.u)); if(rows.length) out.plan = { what:'Check', opts: hipbNorm(rows.map(r => ({ u: r.u, w: (r.p + .05) ** 2 }))) }; }
+    else if(role === 'doctor'){
+      const claim = F.acc.filter(a => a.claim === 'seer' && isAlive(a.a) && a.a !== b).map(a => a.a).pop();
+      const heat = F.acc.filter(a => a.b === b).length + F.votes.reduce((a, e) => a + Object.values(hipbVotes(F, e, b)).filter(c => c === b).length, 0);
+      const opts = [{ u: b, w: 1.2 + .5 * heat }, ...view.rows.map(r => ({ u: r.u, w: (1 - r.p) ** 2 * (r.u === claim ? 6 : 1) }))];
+      out.plan = { what:'Guard', opts: hipbNorm(opts) };
+    } else if(role === 'witch' && nt && (nt.wolfTarget || nt.wolfFailed)){
+      const p = secrets[b]?.potions || {}, v = nt.wolfTarget, top = view.rows.slice().sort((x, y) => y.p - x.p)[0], few = aliveUids().length <= 4;
+      // Always save herself. Otherwise save a trusted victim, but not by reflex: on night 1, about half the time
+      // (so a first-night death is still possible); later, more readily. Fixed per night, so the plan doesn't flicker.
+      const chance = Math.max(0, 1 - (P[v] ?? 0) / .4) * (n === 1 ? .55 : .85);
+      const save = !!(p.save && v && isAlive(v) && (v === b || (hashStr(b + 'save' + n) % 1000) / 1000 < chance));
+      const kill = p.kill && top && (top.p > .75 || (few && top.p > .5)) && (settingsOf(game).witchBoth || !save) ? top.u : null;
+      out.plan = { what:'Potions', save, kill, victim: v };
+    }
+  } else if(ph.name === 'vote'){
+    const c = (ph.candidates || []).filter(u => u !== b);
+    if(c.length){
+      let opts;
+      if(wolf){ const prey = c.filter(u => !view.pack.has(u));
+        // Blend in: vote with the village's likely choice. Give up a packmate only when the runoff board shows them doomed.
+        const lead = ph.round === 2 && ph.prev?.votes ? c.map(u => ({ u, n: Object.values(ph.prev.votes).filter(x => x === u).length })).sort((x, y) => y.n - x.n) : null;
+        const doomed = lead && view.pack.has(lead[0].u) && lead[0].n - (lead[1]?.n || 0) >= 2;
+        opts = doomed ? [{ u: lead[0].u, w: 1 }] : prey.length ? hipbNorm(prey.map(u => ({ u, w: (P[u] ?? .5) ** 3 + .01 }))) : hipbNorm(c.map(u => ({ u, w: 1 - (P[u] ?? .5) })));
+      } else if(role === 'fool') opts = hipbNorm(c.map(u => ({ u, w: (1 - (P[u] ?? .5)) ** 2 + .02 })));   // odd votes make the Fool look guilty
+      else opts = hipbNorm(c.map(u => ({ u, w: (P[u] ?? .01) ** 4 + 1e-4 })));
+      out.plan = { what:'Vote', opts };
+    }
+  } else if(ph.name === 'day' && ph.mode === 'structured' && !ph.floor){
+    // Ties are broken by a small per-bot jitter, so bots with no evidence don't all pick the same name.
+    const j = u => (hashStr(b + u + ph.n) % 1000) * 1e-6;
+    const ok = view.rows.filter(r => !(ph.accused || []).includes(r.u));
+    if(ok.length){
+      let best, urge;
+      // Wolves go after whoever hunts the pack, the village's own suspects, and anyone who keeps surviving their
+      // attacks (likely the Doctor): what can't be killed at night can be hanged by day.
+      if(wolf){ const sc = r => r.threat + r.pub - r.shield + j(r.u); best = ok.slice().sort((x, y) => sc(y) - sc(x))[0]; urge = .6; }
+      else if(role === 'fool'){ best = ok.slice().sort((x, y) => x.p + j(x.u) - y.p - j(y.u))[0]; urge = .5; }
+      else { best = ok.slice().sort((x, y) => y.p + j(y.u) - x.p - j(x.u))[0]; const base = view.W / Math.max(1, view.rows.length);
+        // With a reason, the stronger it is the keener; with none, a hunch to get the day going, if nobody has spoken up yet.
+        urge = best.p >= .9 ? 1 : best.p >= 1.3 * base ? best.p : (ph.accused || []).length ? 0 : .25; }
+      out.plan = { what:'Accuse', target: best.u, urge };
+    }
+  }
+  return out;
+}
+// What a bot says when it accuses u, from the reason that weighs most (a Seer who has found a wolf says so).
+function hipbAccuseLine(F, b, u){
+  const role = secrets[b]?.role, vars = { accused: nameOf(u) };
+  if(role === 'seer' && Object.values(secrets[b]?.seen || {}).some(v => v?.target === u && v.wolf)) return { q: draw('b_seer', vars), claim:'seer' };
+  // Only public evidence is ever spoken. A wolf whose real reason is private (or weak) stays cagey.
+  const ev = hipbEvidence(F, b, u).filter(x => x.w > 0 && VOICE['b_' + x.k]).sort((x, y) => y.w - x.w)[0];
+  if(role === 'werewolf' && (!ev || ev.w < .3)) return { q: draw('b_cagey', vars) };
+  return { q: ev ? draw('b_' + ev.k, { ...vars, x: nameOf(ev.x) }) : draw('b_hunch', vars) };
+}
+// What a bot says when accused by a.
+function hipbDefendLine(F, b, a){
+  const role = secrets[b]?.role, vars = { accuser: nameOf(a) };
+  if(role === 'fool') return draw('d_fool', vars);
+  if(role === 'seer'){ const seen = Object.values(secrets[b]?.seen || {}).filter(v => v?.wolf && isAlive(v.target));
+    if(seen.some(v => v.target === a)) return draw('d_seer', vars);
+    if(seen.length) return draw('d_seerClaim', { ...vars, x: nameOf(seen[0].target) }); }
+  const mine = F.votes.filter(e => e.votes?.[b] === a).pop();
+  if(mine) return draw('d_revenge', { ...vars, d: mine.n });
+  const ev = hipbEvidence(F, b, a), inn = ev.find(x => x.k === 'accusedInnocent') || ev.find(x => x.k === 'votedInnocent');
+  if(inn) return draw('d_' + inn.k, { ...vars, x: nameOf(inn.x) });
+  const P = role === 'werewolf' ? hipbSuspicion(F, null).P : hipbSuspicion(F, b).P;
+  return draw((P[a] ?? 0) > .45 ? 'd_suspect' : 'd_plain', vars);
+}
+// A bot's moment to act: a fixed, human-looking delay from its id, so bots don't all move at once.
+const hipbAt = (b, key, from, to) => from + (to - from) * ((hashStr(b + key) % 1000) / 1000);
 async function runBots(){
   const ph = game.phase; if(!ph) return;
-  const t = now(), al = aliveUids();
+  const t = now(), al = aliveUids(), s = settingsOf(game), F = hipbFacts();
   // Bots, plus anyone who left mid-game with "Leave (bot stand-in)": a bot quietly plays their character.
-  const bots = al.filter(u => players()[u].bot || players()[u].standin);
-  const others = b => al.filter(u => u !== b);
+  const bots = al.filter(hipbBot);
   for(const b of bots){
-    const r = secrets[b]?.role; const a = actions[b];
+    const r = secrets[b]?.role, a = actions[b];
     if(ph.name === 'deal'){
       // Bots draw at a human-ish pace: from 2 s after the cards appear, and always within 12 s.
       if(!ph.picks?.[b] && t > ph.showAt + 2000 && (Math.random() < .05 || t > ph.showAt + 12000)){
@@ -1492,53 +1708,89 @@ async function runBots(){
         if(free.length) await drawCard(b, rnd(free));
       }
     } else if(ph.name === 'night'){
-      const n = ph.n, nt = curNight(n), locked = nt && (nt.wolfTarget || nt.wolfFailed), mine = a && a.n === n;
+      // Night moves come at human-looking moments, scaled to the night's length (N).
+      const n = ph.n, nt = curNight(n), locked = nt && (nt.wolfTarget || nt.wolfFailed), mine = a && a.n === n, start = ph.startedAt || t, N = dur(s).night * 1000;
       if(r === 'werewolf' && !locked){
-        if(!mine || Math.random() < .2){
-          const mates = (secrets[b]?.pack || []).filter(u => u !== b && isAlive(u));
-          const mp = mates.map(u => actions[u]?.n === n ? actions[u].target : null).filter(Boolean);
-          const prey = al.filter(u => secrets[u]?.role !== 'werewolf');
-          const tg = mp.length && Math.random() < .7 ? rnd(mp) : rnd(prey);
-          if(tg && (!mine || a.target !== tg)) await DB.set(ap(b), { n, kind:'wolf', target: tg });
-        }
+        if(t < hipbAt(b, 'w' + n, start + .15 * N, start + .5 * N)) continue;
+        const mates = (secrets[b]?.pack || []).filter(u => u !== b && isAlive(u));
+        const mp = mates.map(u => actions[u]?.n === n ? actions[u].target : null).filter(Boolean);
+        // Lead with the best kill; once a packmate has chosen, go along with them so the pack agrees.
+        if(!mine){ const tg = mp.length ? rnd(mp) : hipbPick(hipbBrain(F, b).plan.opts); if(tg) await DB.set(ap(b), { n, kind:'wolf', target: tg }); }
+        else if(mp.length && !mp.includes(a.target) && Math.random() < .25) await DB.set(ap(b), { n, kind:'wolf', target: rnd(mp) });
       } else if((r === 'seer' || r === 'doctor') && !mine){
-        if(Math.random() < .35) await DB.set(ap(b), { n, kind:r, target: rnd(r === 'seer' ? others(b) : al), done:true });
+        if(t < hipbAt(b, 's' + n, start + .2 * N, start + .65 * N)) continue;
+        const plan = hipbBrain(F, b).plan; if(plan?.opts?.length) await DB.set(ap(b), { n, kind:r, target: hipbPick(plan.opts), done:true });
       } else if(r === 'witch' && !mine && locked){
-        if(Math.random() < .4){
-          const p = secrets[b]?.potions || {};
-          const save = !!(p.save && nt.wolfTarget && Math.random() < .5);
-          const kill = p.kill && (settingsOf(game).witchBoth || !save) && Math.random() < .15 ? rnd(others(b)) : null;
-          await DB.set(ap(b), { n, kind:'witch', save, kill, done:true });
-        }
+        const k = `${b}|lock|${n}`; hipbMem[k] = hipbMem[k] || t;
+        if(t < hipbAt(b, 'x' + n, hipbMem[k] + 2000, Math.max(hipbMem[k] + 2500, Math.min(hipbMem[k] + 10000, (ph.endsAt || t) - 2000)))) continue;
+        const plan = hipbBrain(F, b).plan; await DB.set(ap(b), { n, kind:'witch', save: !!plan?.save, kill: plan?.kill || null, done:true });
       } else {
         // Bots answer the shared silly question at a human pace: 2–20 s after it appears (owner, 2026-10-06).
         const wait = 2000 + hashStr(`${b}:${n}:${filler?.round}`) % 18000;
         if(filler?.n === n && filler.picks?.[b]?.r !== filler.round && t >= ph.startedAt && t >= (filler.roundAt || 0) + wait)
-          await DB.update(`${gp()}/live/filler`, { [`picks.${b}`]: { r: filler.round, t: Math.random() < .1 ? null : rnd(others(b)) } }).catch(() => {});
+          await DB.update(`${gp()}/live/filler`, { [`picks.${b}`]: { r: filler.round, t: Math.random() < .1 ? null : rnd(al.filter(u => u !== b)) } }).catch(() => {});
       }
     } else if(ph.name === 'day'){
-      // Bots give people at least 8 s to talk before accusing, at the start of the day and of each round.
-      if(ph.mode === 'structured' && !ph.floor && t > (ph.roundAt || ph.startedAt) + 8000 && Math.random() < .06){
-        const ok = others(b).filter(u => !(ph.accused || []).includes(u));
-        if(ok.length) await claimFloor(b, rnd(ok));
+      // Bots give people at least 8 s to talk before accusing, at the start of the day and of each round, and accuse
+      // only when they have a reason (or are a wolf or the Fool, who have their own).
+      if(ph.mode === 'structured' && !ph.floor && t > Math.max(ph.roundAt || ph.startedAt, ph.holdUntil || 0) + Math.min(8000, dur(s).window * 300)){
+        const plan = hipbBrain(F, b).plan;
+        // A hunch grows as the window runs out: someone has to get the day going.
+        const from = Math.max(ph.roundAt || ph.startedAt, ph.holdUntil || 0), frac = Math.min(1, (t - from) / Math.max(1, (ph.endsAt || t) - from));
+        const urge = plan?.urge === .25 ? .25 + 1.5 * frac : plan?.urge || 0;
+        if(plan?.target && Math.random() < .035 * urge){ const L = hipbAccuseLine(F, b, plan.target); await claimFloor(b, plan.target, L.q, L.claim); }
       }
-      if(!ph.ready?.[b] && t > ph.startedAt + 4000 && Math.random() < .06) await upd({ [`phase.ready.${b}`]: true });
+      if(!ph.ready?.[b] && t > ph.startedAt + 10000 && Math.random() < .05) await upd({ [`phase.ready.${b}`]: true });
     } else if(ph.name === 'vote'){
-      if(!ph.votes?.[b] && t > (ph.showUntil || 0) && Math.random() < .3){
-        const opts = ph.candidates.filter(u => u !== b);
-        await upd({ [`phase.votes.${b}`]: Math.random() < .1 || !opts.length ? 'abstain' : rnd(opts) });
+      // Votes come in partway through the clock, not all at once; a runoff is thought through again.
+      const from = Math.max(ph.holdUntil || 0, ph.showUntil || 0, ph.startedAt || 0), to = ph.endsAt || from + 30000;
+      if(!ph.votes?.[b] && t >= hipbAt(b, `v${ph.n}.${ph.round}`, from + 2000, from + (to - from) * .6)){
+        const plan = hipbBrain(F, b).plan, k = `${b}|vote|${ph.n}|${ph.round}`;
+        hipbMem[k] = plan?.opts?.length ? hipbPick(plan.opts) : 'abstain';
+        await upd({ [`phase.votes.${b}`]: hipbMem[k] });
       }
     }
   }
 }
-async function claimFloor(accuser, target){
+async function claimFloor(accuser, target, quote = null, claim = null){
   return DB.transact(gp(), g => {
     const p = g?.phase; if(!p || p.name !== 'day' || p.mode !== 'structured' || p.floor || p.pausedAt) return null;
     if((p.accused || []).includes(target) || g.players[target]?.alive === false || g.players[accuser]?.alive === false) return null;
-    const d = dur(settingsOf(g)), line = draw('accuser', { accuser: g.players[accuser]?.name, accused: g.players[target]?.name }), hold = now() + sayMs(line);
-    return { 'phase.floor': { accuser, accused: target, stage:'accuser', say: mkSay([{ t: line }]), holdUntil: hold, endsAt: hold + d.speak * 1000 },
-      'phase.accused': [...(p.accused || []), target] };
+    const d = dur(settingsOf(g)), line = draw('accuser', { accuser: g.players[accuser]?.name, accused: g.players[target]?.name });
+    // A bot says its reason itself, and then needs no talking time of its own.
+    const items = [{ t: line }, ...(quote ? [{ t: `${g.players[accuser]?.name} says: "${quote}"` }] : [])], hold = now() + scriptMs(items);
+    const key = `g${g.gameNo || 1}n${p.n}r${p.round}`;
+    return { 'phase.floor': { accuser, accused: target, stage:'accuser', say: mkSay(items), holdUntil: hold, endsAt: hold + (quote ? 2500 : d.speak * 1000) },
+      'phase.accused': [...(p.accused || []), target],
+      // Public record of accusations, for the bots' reasoning (everyone heard them anyway).
+      [`acc.${key}`]: { g: g.gameNo || 1, n: p.n, r: p.round, a: accuser, b: target, claim: claim || null } };
   });
+}
+// "Bot brains" (Test mode, host): each bot's role, its view of every living player with the reasons behind it,
+// and its weighted options for the next move.
+let hipbOpen = false;
+function hipbPanelHTML(){
+  const F = hipbFacts(), N = u => esc(nameOf(u)), pct = x => Math.round(x * 100) + '%';
+  const bots = aliveUids().filter(hipbBot);
+  if(!bots.length) return '<h2>Bot brains</h2><p class="hint">No living bots.</p>';
+  const ph = game.phase || {};
+  return `<h2>Bot brains</h2><p class="hint">Test mode only: this shows the bots' roles. Each bot uses only what its own player could know.</p>` + bots.map(b => {
+    const B = hipbBrain(F, b), why = ev => ev.slice().sort((x, y) => Math.abs(y.w) - Math.abs(x.w)).map(x => `<span class="${x.w > 0 ? 'hb-up' : x.w < 0 ? 'hb-dn' : ''}">${x.w ? (x.w > 0 ? '+' : '') + x.w.toFixed(2) + ' ' : ''}${esc(x.txt)}</span>`).join('');
+    let plan = '';
+    const P = B.plan;
+    if(P?.opts) plan = `${P.what}: ${P.opts.slice(0, 4).map(o => `${N(o.u)} ${pct(o.w)}`).join(' · ')}`;
+    else if(P?.what === 'Potions') plan = `Potions: ${P.save ? 'save ' + N(P.victim) : 'no save'}${P.kill ? ', poison ' + N(P.kill) : ', no poison'}`;
+    else if(P?.what === 'Accuse') plan = P.urge ? `Wants to accuse ${N(P.target)} (urge ${pct(P.urge)})` : `No one to accuse yet (best guess ${N(P.target)})`;
+    const voted = ph.name === 'vote' && ph.votes?.[b] ? ` → voted ${ph.votes[b] === 'abstain' ? 'abstain' : N(ph.votes[b])}` : '';
+    const head = B.wolf ? '<tr><th>Player</th><th>Threat</th><th>Kill</th><th>Why</th></tr>' : '<tr><th>Player</th><th>Wolf?</th><th>Why</th></tr>';
+    const kill = B.wolf ? Object.fromEntries(hipbSoft(B.view.rows, r => r.kill, 2).map(o => [o.u, o.w])) : {};
+    const rows = B.view.rows.slice().sort((x, y) => B.wolf ? y.kill - x.kill : y.p - x.p).map(r => B.wolf
+      ? `<tr><td>${N(r.u)}</td><td>${r.threat.toFixed(2)}</td><td>${pct(kill[r.u] || 0)}</td><td class="hb-why">${why(r.ev)}<span>village thinks ${pct(r.pub)} wolf</span></td></tr>`
+      : `<tr><td>${N(r.u)}</td><td><span class="hb-bar"><i style="width:${pct(r.p)}"></i></span>${pct(r.p)}</td><td class="hb-why">${why(r.ev) || '<span>no evidence</span>'}</td></tr>`).join('');
+    return `<div class="hb"><h3>${N(b)} <span class="sub ${B.wolf ? 'wolfc' : ''}">${esc(roleName(B.role))}${players()[b]?.standin ? ' (stand-in)' : ''}</span></h3>
+      ${B.wolf ? `<p class="note">Pack: ${[...B.view.pack].map(N).join(', ')}.</p>` : `<p class="note">Wolves still at large: ${pubWolves()}${B.view.W < pubWolves() ? ` (${pubWolves() - B.view.W} of them seen)` : ''}.</p>`}
+      <p class="hb-plan">${plan || 'Nothing to decide now.'}${voted}</p><table class="see hb-t">${head}${rows}</table></div>`;
+  }).join('');
 }
 
 // ---- 10. HOST CONTROLS ----------------------------------------------------------
@@ -2571,7 +2823,7 @@ function renderGame(){
   // Host bar
   const away = !host && game.status === 'playing' && game.hostBeat && now() - game.hostBeat > 20000;
   setHTML('hostbar', host && game.status === 'playing'
-    ? `<button class="btn small${gameSetOpen ? ' pri' : ''}" data-act="gset">Settings</button>${s.test.on ? `<button class="btn small" data-act="back" ${backStack.length ? '' : 'disabled'}>Back</button>` : ''}${ph.name === 'deal' ? (s.test.on && !allDrawn(ph) ? '<button class="btn small" data-act="skip">Skip ahead</button>' : '') : `<button class="btn small" data-act="pause">${ph.pausedAt ? 'Resume' : 'Pause'}</button><button class="btn small" data-act="skip" ${ph.pausedAt ? 'disabled' : ''}>Skip ahead</button>`}`
+    ? `<button class="btn small${gameSetOpen ? ' pri' : ''}" data-act="gset">Settings</button>${s.test.on ? `<button class="btn small" data-act="back" ${backStack.length ? '' : 'disabled'}>Back</button><button class="btn small${hipbOpen ? ' pri' : ''}" data-act="hipb">Bot brains</button>` : ''}${ph.name === 'deal' ? (s.test.on && !allDrawn(ph) ? '<button class="btn small" data-act="skip">Skip ahead</button>' : '') : `<button class="btn small" data-act="pause">${ph.pausedAt ? 'Resume' : 'Pause'}</button><button class="btn small" data-act="skip" ${ph.pausedAt ? 'disabled' : ''}>Skip ahead</button>`}`
     : (away ? `<button class="btn small pri" data-act="takehost">The host seems to be away. Take over as host</button>` : ''));
   // Ways out sit at the very bottom of the screen (owner, 2026-10-07): End game for the host; for everyone else,
   // Leave (bot stand-in), where a bot plays for them in secret until they come back. Plus the rules, for reference.
@@ -2587,6 +2839,7 @@ function renderGame(){
       return `<tr><td>${esc(nameOf(u))}${isAlive(u) ? '' : ' \u2020'}</td><td class="${r === 'werewolf' ? 'wolfc' : ''}">${esc(roleName(r))}</td><td>${esc(what)}</td></tr>`;
     }).join('')}</table>${ph.name === 'night' && curNight(n)?.wolfTarget ? `<p class="note">Wolves locked on ${esc(nameOf(night.wolfTarget))}.</p>` : ''}`);
   } else setHTML('seeall', '');
+  setHTML('hipb', host && s.test.on && hipbOpen && game.status === 'playing' ? hipbPanelHTML() : '');
 }
 function recapHTML(){
   const g = game.gameNo || 1;
@@ -2940,6 +3193,7 @@ document.addEventListener('click', async e => {
       case 'snd-open': soundOpen = true; return renderSoundUI();
       case 'snd-close': soundOpen = false; return renderSoundUI();
       case 'gset': gameSetOpen = !gameSetOpen; return render();
+      case 'hipb': hipbOpen = !hipbOpen; return render();
       // Splash screen and How to Play (the walkthrough plays only when someone asks for it)
       case 'splash-start': return endSplash();
       case 'howto': return openHowTo('watch');
