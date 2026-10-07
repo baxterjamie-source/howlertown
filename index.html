@@ -197,6 +197,7 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
 .c-side .dead{color:#e9b3aa;opacity:.85}
 .c-side .r{color:var(--dim)}
 .c-main{position:absolute;left:3vw;right:27vw;top:12vh}
+#crier .c-detail .card{width:fit-content;max-width:100%}   /* message boxes hug their text (owner, 2026-10-06) */
 .c-narr{font-family:var(--serif);font-size:1.8em;line-height:1.3;color:#f1e7cf;text-shadow:0 2px 12px #000;margin:0 0 .5em}
 .c-detail{font-size:1em;color:var(--parch);text-shadow:0 1px 6px #000}
 .c-detail .vgroup{background:rgba(7,9,15,.6);margin:.3em 0;padding:.4em .8em}
@@ -651,7 +652,7 @@ function newsSpeech(news){
   return `In other news… ${before ? before + '… ' : ''}${name}… ${after.trim()}`;
 }
 // The verdict's script: gavel, the hanging line, the trapdoor, the role, the mob's reaction, then the news.
-function verdictScript(e, reason, news, foolEnd){
+function verdictScript(e, reason, news, foolEnd, decided){
   const s = settingsOf(game), items = [{ snd:'gavel' }];
   if(e){
     const r = secrets[e]?.role || 'villager', name = nameOf(e);
@@ -662,11 +663,12 @@ function verdictScript(e, reason, news, foolEnd){
     if(r === 'fool'){
       if(s.reveal) items.push({ t: roleSentence(e, r), role: true });
       items.push({ t: draw('fool') });
-      if(!foolEnd) items.push({ snd:'foolWin' }, { t: draw('foolOn', { w }) });
+      if(!foolEnd && !decided) items.push({ snd:'foolWin' }, { t: draw('foolOn', { w }) });
     } else if(!s.reveal) items.push({ t: VOICE.secret[0] });
     else {
       items.push({ t: roleSentence(e, r), role: true });
-      if(r === 'werewolf') items.push({ t: draw('vindicated', { name, w }, l => left > 0 || !/the last\?/.test(l)) });
+      if(decided);                                                       // the game is over: no mob line
+      else if(r === 'werewolf') items.push({ t: draw('vindicated', { name, w }, l => left > 0 || !/the last\?/.test(l)) });
       else items.push({ t: draw('shame', { name, w }) });
     }
   } else items.push({ t: draw('noHang') });
@@ -1054,8 +1056,9 @@ async function stepBack(){
   await DB.set(gp(), g);
   } finally { ticking = false; }
 }
-function winCheck(){
-  const al = aliveUids(); const wolves = al.filter(u => secrets[u]?.role === 'werewolf').length; const others = al.length - wolves;
+// without: work it out as if that player were already dead (the verdict asks before the hanging is written).
+function winCheck(without = null){
+  const al = aliveUids().filter(u => u !== without); const wolves = al.filter(u => secrets[u]?.role === 'werewolf').length; const others = al.length - wolves;
   const s = settingsOf(game);
   if(wolves === 0) return 'village';
   if(wolves >= others){
@@ -1325,7 +1328,9 @@ async function stepVote(ph, t){
     eliminated: (top.length > 1 && ph.round === 1) ? null : eliminated, runoff: top.length > 1 && ph.round === 1 ? top : null });
   if(top.length > 1 && ph.round === 1) return startVote(ph.n, 2, top, { tally, votes: s.votes === 'public' ? (ph.votes || {}) : null });
   const reason = eliminated ? 'elected' : (top.length > 1 ? 'tie' : 'none');
-  const news = nightNews(ph.n);
+  // A hanging that ends the game skips the mob line, the news and the vote board: straight to the win screen.
+  const decided = !!eliminated && ((secrets[eliminated]?.role === 'fool' && s.foolWin === 'end') || !!winCheck(eliminated));
+  const news = decided ? null : nightNews(ph.n);
   if(news) await DB.update(`${gp()}/live/filler`, { used: [...(filler?.used || []), `${news.q}|${news.u}`] }).catch(() => {});
   const up = { phase: { name:'verdict', n: ph.n, startedAt:t, endsAt: t + d.verdict * 1000, eliminated, reason, round: ph.round, tally,
     votes: s.votes === 'public' ? (ph.votes || {}) : null, foolEnd: false, news } };
@@ -1337,7 +1342,8 @@ async function stepVote(ph, t){
     if(s.reveal) up.phase.disguise = game.alter?.[eliminated] || (r === 'villager' ? artOf(eliminated) : 'villager1');
   }
   // Built before the hanged player is marked dead, so the wolf count it uses is still the public one.
-  const items = verdictScript(eliminated, reason, news, up.phase.foolEnd);
+  const items = verdictScript(eliminated, reason, news, up.phase.foolEnd, decided);
+  up.phase.decided = decided;
   // The face changes first (the 3.4 s crossfade starts at revealAt), then the role text and the narrator's line.
   const ri = items.findIndex(it => it.role);
   if(ri >= 0){ up.phase.revealAt = t + scriptMs(items.slice(0, ri)); items.splice(ri, 0, { gap: REVEAL_FACE_MS }); }
@@ -1346,7 +1352,11 @@ async function stepVote(ph, t){
   const ni = items.findIndex(it => it.snd === 'newsNotify'), lead = ni >= 0 ? FORGE.lead : 0;
   if(ni >= 0){ const forge = t + scriptMs(items.slice(0, ni)); items[ni].at = forge + FORGE.lead;
     up.phase.forgeAt = forge; up.phase.newsAt = forge + FORGE.ms; up.phase.newsUntil = t + scriptMs(items) + lead + 1500; }
-  up.phase.say = mkSay(items); up.phase.endsAt = t + Math.max(d.verdict * 1000, 10000, scriptMs(items) + lead + 2500);
+  // Ordinary verdicts end with a clear 15 s of who-voted-for-whom (boardAt: every card closes, the Crier shows the
+  // board alone). A game-deciding verdict ends soon after the hanging.
+  up.phase.say = mkSay(items);
+  if(decided) up.phase.endsAt = t + scriptMs(items) + 1500;
+  else { up.phase.boardAt = t + scriptMs(items) + lead + 500; up.phase.endsAt = Math.max(t + d.verdict * 1000, up.phase.boardAt + 15000); }
   if(eliminated){ up[`players.${eliminated}.alive`] = false; up[`hanged.${eliminated}`] = true; }   // the hanged don't bleed
   await upd(up);
 }
@@ -1408,7 +1418,8 @@ setInterval(() => { if(game && isHost() && game.status !== 'ended') upd({ hostBe
 async function runBots(){
   const ph = game.phase; if(!ph) return;
   const t = now(), al = aliveUids();
-  const bots = al.filter(u => players()[u].bot);
+  // Bots, plus anyone who left mid-game with "Leave (bot stand-in)": a bot quietly plays their character.
+  const bots = al.filter(u => players()[u].bot || players()[u].standin);
   const others = b => al.filter(u => u !== b);
   for(const b of bots){
     const r = secrets[b]?.role; const a = actions[b];
@@ -1525,6 +1536,8 @@ function enterGame(c){
   leaveListeners(); code = c; ls.set('howlertown_current_game', c);
   unsubs.push(DB.watch(gp(), g => { game = g; if(!g || g.status === 'deleted'){ leaveGame(); return; }
     if(!crier && g.kicked?.[myUid] && !g.players?.[myUid]){ leaveGame(); setTimeout(() => { const e = $('home-err'); if(e) e.textContent = 'The host removed you from the game.'; }, 50); return; }
+    // Back after "Leave (bot stand-in)" (same player, same browser): take over from the bot.
+    if(!crier && g.players?.[myUid]?.standin) DB.update(gp(), { [`players.${myUid}.standin`]: null }).catch(() => {});
     ensureHostSubs(); render(); }));
   unsubs.push(DB.watchCol(`${gp()}/actions`, a => { actions = a || {}; render(); }));
   unsubs.push(DB.watch(sp(myUid), s => { mySecret = s; render(); }));
@@ -1983,6 +1996,8 @@ function renderReveal(){
     if(ph.name === 'dawn' && ph.deaths?.length && !introRunning(ph)){        // after the dawn animation
       key = `g${game.gameNo}-d${ph.n}`;
       items = ph.deaths.map((u, i) => ({ u, line: sayDeath(ph.causes?.[u] || 'generic', ph.n + i * 3 + hashStr(u), nameOf(u)) }));
+    } else if(ph.name === 'verdict' && ph.boardAt && now() >= ph.boardAt){
+      // The verdict's last 15 s: no cards, so everyone (the Crier above all) sees who voted for whom.
     } else if(ph.name === 'verdict' && ph.news && ART.anvil && now() >= (ph.forgeAt || Infinity) && now() < ph.newsAt && players()[ph.news.u]){
       // Before the news: the hammer strikes the anvil, in step with the jingle.
       revealDone.add(`g${game.gameNo}-v${ph.n}-${ph.round}`); revealDone.add(`g${game.gameNo}-v${ph.n}-${ph.round}-r`);
@@ -2070,7 +2085,12 @@ const SLOTS = {
   villageStand: [[775,925],[1165,965],[830,880],[1125,882],[720,985],[1300,935],[1215,900],[640,925],[1250,990],[560,895],[1390,900],[500,960],
     [870,1010],[1090,1015],[450,915],[1465,955]],                      // 16, enough for every living player
   wolfStand:    [[870,955],[1110,975],[990,915],[740,925]],
-  // Where the dead lie: nearest the well first
+  // During the game (dawn to verdict; placed on the day painting with the owner's rule "bodies in front, the
+  // living behind"): the crowd stands in two loose rows behind and beside the well, filling from the middle out;
+  // the dead lie on the clear cobbles just inside the front walls (never on the walls by the stream).
+  crowd: [[828,828],[1104,828],[840,763],[1092,763],[732,828],[1212,828],[756,763],[1176,763],[624,828],[1320,828],[660,763],[1272,763],[516,828],[1428,828],[564,763],[1368,763]],
+  front: [[948,943],[744,924],[1152,936],[1284,893]],
+  // The finale: where the dead lie, nearest the well first (the owner likes the overlapping heap)
   fall: [[985,958],[840,905],[1130,908],[745,975],[1230,985],[640,935],[1335,940],[990,1010],[560,980],[1420,975],[880,1015],[1100,1015],[520,925],[1450,930],[700,900],[1270,900]],
   foolStand:    [[985,955]],
 };
@@ -2102,8 +2122,9 @@ function figure(art, view, x, y, o = {}){
     let seed = Math.round(x * 7 + y * 13) || 1; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     let pool = '';
     if(o.blood){
-      for(let i = 0; i < 7; i++) pool += `<ellipse cx="${(cx + (r() - .5) * L * .9).toFixed(1)}" cy="${(cy + hh * .12 + (r() - .5) * hh * .6).toFixed(1)}" rx="${(L * (.45 + r() * .3)).toFixed(1)}" ry="${(hh * (.45 + r() * .3)).toFixed(1)}" transform="rotate(${((r() - .5) * 16).toFixed(1)} ${cx.toFixed(1)} ${cy.toFixed(1)})"/>`;
-      for(let i = 0; i < 4; i++){ const a = r() * Math.PI * 2; pool += `<circle cx="${(cx + Math.cos(a) * L * (1 + r() * .25)).toFixed(1)}" cy="${(cy + Math.sin(a) * hh * (1 + r() * .3)).toFixed(1)}" r="${(hh * (.08 + r() * .1)).toFixed(1)}"/>`; }
+      // Tight around the body (owner: less blood): it just borders the body, with a few drops close by.
+      for(let i = 0; i < 7; i++) pool += `<ellipse cx="${(cx + (r() - .5) * L * .55).toFixed(1)}" cy="${(cy + hh * .1 + (r() - .5) * hh * .35).toFixed(1)}" rx="${(L * (.5 + r() * .16)).toFixed(1)}" ry="${(hh * (.4 + r() * .16)).toFixed(1)}" transform="rotate(${((r() - .5) * 12).toFixed(1)} ${cx.toFixed(1)} ${cy.toFixed(1)})"/>`;
+      for(let i = 0; i < 3; i++){ const a = r() * Math.PI * 2; pool += `<circle cx="${(cx + Math.cos(a) * L * (.98 + r() * .1)).toFixed(1)}" cy="${(cy + Math.sin(a) * hh * (.8 + r() * .15)).toFixed(1)}" r="${(hh * (.05 + r() * .06)).toFixed(1)}"/>`; }
       pool = `<g fill="#4a0508" opacity=".82" filter="url(#fg-pool)">${pool}</g>`;
     }
     return pool + `<ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="${(L * .98).toFixed(1)}" ry="${(hh * .62).toFixed(1)}" fill="#05060f" opacity=".55" filter="url(#fg-soft)"/>` + body;
@@ -2151,9 +2172,9 @@ function nightDeadFigures(){
   const g = ph.name === 'dawn' ? 'dawn' : 'day', night = ln && ln.n === ph.n ? (ln.deaths || []).slice(0, 3) : [];
   // Last night's dead lie in the square from dawn through the verdict (night victims bleed). At the verdict the
   // hanged player lies there too, in their alter ego until the role is told (artFor), without blood.
-  const items = night.map((u, i) => { const [x, y] = SLOTS.fall[i]; const art = revealedArt(u);
+  const items = night.map((u, i) => { const [x, y] = SLOTS.front[i]; const art = revealedArt(u);
     return { y, m: figure(art || game.alter?.[u] || 'villager1', 'side', x, y, { grade:g, fallen:true, ...deadPose(u), shade: !art && !game.alter?.[u], blood: true }) }; });
-  if(ph.name === 'verdict' && ph.eliminated){ const [x, y] = SLOTS.fall[night.length], art = artFor(ph.eliminated);
+  if(ph.name === 'verdict' && ph.eliminated){ const [x, y] = SLOTS.front[night.length] || SLOTS.front[0], art = artFor(ph.eliminated);
     items.push({ y, m: figure(art, 'side', x, y, { grade:g, fallen:true, ...deadPose(ph.eliminated), scale: art === 'wolf' ? 1.25 : 1 }) }); }
   if(!items.length) return null;
   const svg = items.sort((a, b) => a.y - b.y).map(i => i.m).join('');
@@ -2164,7 +2185,7 @@ function nightDeadFigures(){
 function villageCrowd(){
   const ph = game.phase; if(!ph || !['dawn', 'day', 'vote', 'verdict'].includes(ph.name) || !game.alter) return '';
   const used = {};
-  return uids().filter(isAlive).slice(0, SLOTS.villageStand.length).map((u, i) => { const art = game.alter[u] || 'villager1', [x, y] = SLOTS.villageStand[i];
+  return uids().filter(isAlive).slice(0, SLOTS.crowd.length).map((u, i) => { const art = game.alter[u] || 'villager1', [x, y] = SLOTS.crowd[i];
     used[art] = (used[art] || 0) + 1;
     return { y, m: figure(art, 'front', x, y, { grade: ph.name === 'dawn' ? 'dawn' : 'day', flip: used[art] % 2 === 0 }) }; })
     .sort((a, b) => a.y - b.y).map(f => f.m).join('');
@@ -2183,7 +2204,7 @@ function renderBannerScene(){
   }
   if(game?.status === 'playing'){
     const nd = nightDeadFigures(), crowd = villageCrowd();
-    const svg = (nd ? nd.svg : '') + crowd;
+    const svg = crowd + (nd ? nd.svg : '');       // the living behind first, so bodies and blood never paint over legs
     setHTML('bannerScene', svg ? `<svg class="scene" viewBox="${BANNER_VB()}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${FIG_DEFS}${svg}</svg>` : '');
     setHTML('bannerMeds', nd ? nd.meds : '');
     return;
@@ -2359,6 +2380,7 @@ function votePanel(ph){
     `<div class="row"><button class="btn ${mine === 'abstain' ? 'pri' : ''}" data-act="vote" data-u="abstain">${mine === 'abstain' ? 'Abstaining' : 'Abstain'}</button></div>`;
 }
 function verdictPanel(ph){
+  if(ph.decided) return '';                                           // the game is over: the votes are in "How it happened"
   const news = newsLine(ph) ? `<p class="hint" style="margin-top:12px;font-style:italic">${esc(newsLine(ph))}</p>` : '';
   return resultsHTML(ph.tally, ph.votes, 'How the village voted') + news;
 }
@@ -2474,7 +2496,9 @@ function renderGame(){
   const away = !host && game.status === 'playing' && game.hostBeat && now() - game.hostBeat > 20000;
   setHTML('hostbar', host && game.status === 'playing'
     ? `<button class="btn small${gameSetOpen ? ' pri' : ''}" data-act="gset">Settings</button>${s.test.on ? `<button class="btn small" data-act="back" ${backStack.length ? '' : 'disabled'}>Back</button>` : ''}${ph.name === 'deal' ? (s.test.on && !allDrawn(ph) ? '<button class="btn small" data-act="skip">Skip ahead</button>' : '') : `<button class="btn small" data-act="pause">${ph.pausedAt ? 'Resume' : 'Pause'}</button><button class="btn small" data-act="skip" ${ph.pausedAt ? 'disabled' : ''}>Skip ahead</button>`}<button class="btn small blood" data-act="endgame">End game</button>`
-    : away ? `<button class="btn small pri" data-act="takehost">The host seems to be away. Take over as host</button>` : '');
+    : (away ? `<button class="btn small pri" data-act="takehost">The host seems to be away. Take over as host</button>` : '') +
+      // Any other player may step away mid-game: a bot plays for them in secret until they come back.
+      (game.status === 'playing' && players()[myUid] ? `<button class="btn small" data-act="standin">Leave (bot stand-in)</button>` : ''));
   setHTML('gamesettings', host && game.status === 'playing' && gameSetOpen ? gameSettingsHTML() : '');
   // All-seeing view (Test mode, host only)
   if(host && s.test.on && s.test.allSeeing && game.status === 'playing'){
@@ -2845,6 +2869,11 @@ document.addEventListener('click', async e => {
       case 'leave':
         if(game?.status === 'lobby' && !isHost()) await DB.update(gp(), { [`players.${myUid}`]: null });
         return leaveGame();
+      case 'standin':
+        if(!game || game.status !== 'playing' || isHost() || !players()[myUid]) return;
+        if(!confirm('Leave the game for now? A bot will play your character until you come back (rejoin with the code, on this phone).')) return;
+        await DB.update(gp(), { [`players.${myUid}.standin`]: true });
+        return leaveGame();
       case 'start': return startGame();
       case 'makehost': return upd({ hostUid: u, hostName: nameOf(u) });
       case 'takehost': return upd({ hostUid: myUid, hostName: myName, hostBeat: now() });
@@ -2894,9 +2923,9 @@ document.addEventListener('click', async e => {
       case 'finale-next': finaleStage = 2; return renderFinale();
       case 'finale-close': finaleStage = 0; return renderFinale();
       case 'finale-scores': finaleStage = 2; return renderFinale();
-      case 'finale-lobby': { finaleStage = 0; renderFinale(); const up = { status:'lobby', phase:null, result:null, revealed:{}, revealedArt:{}, foolWon:null }; for(const x of uids()) up[`players.${x}.alive`] = true; return upd(up); }
+      case 'finale-lobby': { finaleStage = 0; renderFinale(); const up = { status:'lobby', phase:null, result:null, revealed:{}, revealedArt:{}, foolWon:null }; for(const x of uids()){ up[`players.${x}.alive`] = true; up[`players.${x}.standin`] = null; } return upd(up); }
       case 'resetscores': { const up = {}; for(const x of uids()) up[`players.${x}.score`] = 0; return upd(up); }
-      case 'relobby': { const up = { status:'lobby', phase:null, result:null, revealed:{}, revealedArt:{}, lastNight:null, foolWon:null }; for(const x of uids()) up[`players.${x}.alive`] = true; return upd(up); }
+      case 'relobby': { const up = { status:'lobby', phase:null, result:null, revealed:{}, revealedArt:{}, lastNight:null, foolWon:null }; for(const x of uids()){ up[`players.${x}.alive`] = true; up[`players.${x}.standin`] = null; } return upd(up); }
     }
   }catch(err){ console.error(err); alert('Something went wrong: ' + err.message); }
 });
