@@ -3103,8 +3103,9 @@ const htList = (names, o = {}) => `<div class="list">${names.map(n => { const m 
 const htPhone = inner => `<div class="ht-phone"><div class="ht-screen">${inner}</div></div>`;
 const htMed = (art, name, dead) => medallion('ht-' + art, { size:'min(30vh,52vw)', art, rim: dead ? 'red' : 'gold', name, bg:'#2b3a55' });
 const htTitle = t => `<div class="ht-title">${t}</div>`;
+const htHangCard = () => `<div class="ht-card"><div class="xfade">${htMed('villager3', 'Ben', true)}</div><div class="reveal-line">The village has hanged Ben.</div><div class="reveal-role xf-wait">A Werewolf</div></div>`;   // invisible until the reveal, but holds its room
 // Shared little animations (Web Animations; each beat's run() gets the stage and a live() check).
-const htAnim = (el, kf, ms, delay = 0) => el && el.animate(kf, { duration: ms, delay, fill:'both', easing:'ease-in-out' });
+const htAnim = (el, kf, ms, delay = 0, easing = 'ease-in-out') => el && el.animate(kf, { duration: ms, delay, fill:'both', easing });
 const HT_BEATS = [
   // 1 Welcome
   { ch:0, bg:'night', t:'Welcome to Howlertown. A quiet village… with a problem.' },
@@ -3138,8 +3139,11 @@ const HT_BEATS = [
   // 4 A night
   { ch:3, bg:'night', card: () => `<div class="ht-ring">${['villager1','seer','villager3','villager2'].map(a => `<img class="ht-mf" src="${ART[a].portrait}" alt="">`).join('')}<img class="ht-mf" src="${ART.wolf.portrait}" alt=""><img class="ht-mf" src="${ART.wolf.howlPortrait || ART.wolf.portrait}" alt=""></div>`,
     run: (st, live) => { const f = st.querySelectorAll('.ht-mf'), n = f.length;
-      f.forEach((im, i) => { if(i < n - 2) htAnim(im, [{ opacity:0, filter:'blur(0)' }, { opacity:.45, filter:'blur(0)', offset:.15 }, { opacity:.45, filter:'blur(10px)' }], 3600 - i * 700, i * 700); });
-      htAnim(f[n - 2], [{ opacity:0, filter:'blur(12px)' }, { opacity:1, filter:'blur(0)' }], 1200, 2900);
+      // Faces pile up and blur, then the pile fades away while the wolf sharpens out of it (2.9–4.1 s).
+      f.forEach((im, i) => { if(i >= n - 2) return; const s = i * 700, d = 4100 - s;
+        htAnim(im, [{ opacity:0, filter:'blur(0)' }, { opacity:.45, filter:'blur(0)', offset:500 / d }, { opacity:.45, filter:'blur(10px)', offset:(2900 - s) / d }, { opacity:0, filter:'blur(12px)' }], d, s, 'linear'); });
+      // The plain wolf sharpens out of the pile, then gives way to the howling wolf (so only one set of ears shows).
+      htAnim(f[n - 2], [{ opacity:0, filter:'blur(12px)' }, { opacity:1, filter:'blur(0)', offset:.67 }, { opacity:1, offset:.78 }, { opacity:0 }], 1800, 2900, 'linear');
       htAnim(f[n - 1], [{ opacity:0, transform:'scale(1)' }, { opacity:1, transform:'scale(1.1)' }, { opacity:1, transform:'scale(1.04)' }], 900, 4300);
       htAnim(st.querySelector('.ht-ring'), [{ borderColor:'#e0a24a' }, { borderColor:'#b3352a' }], 400, 4300);
       setTimeout(() => { if(live()) htSfx('cardHowl'); }, 4300); },
@@ -3174,10 +3178,15 @@ const HT_BEATS = [
       <div class="vgroup vtop"><b><span>Ben</span><span class="cnt">4 votes</span></b><p>Ash, Marta, Rosie, Sarah</p></div>
       <div class="vgroup"><b><span>Mike</span><span class="cnt">2 votes</span></b><p>Ben, Pat</p></div><p class="hint">Abstained: Mike</p></div>`,
     t:'Whoever gets the most votes hangs. A tie means a runoff; another tie, and no one hangs.' },
-  { ch:6, bg:'day', svg: () => htCrowd(6) + htBody('villager3', 0, false), card: () => `<div class="ht-card">${htMed('villager3', 'Ben', true)}<div class="reveal-line">The village has hanged Ben.</div></div>`,
+  // The hanging card is built once (as in the game: room kept for the role line) and the next beat changes it in
+  // place, so the frame never jumps.
+  { ch:6, bg:'day', svg: () => htCrowd(6) + htBody('villager3', 0, false), card: htHangCard,
     run: (st, live) => { htSfx('gavel'); setTimeout(() => { if(live()) htSfx('trapdoor'); }, 1500); }, t:'The village has chosen Ben.' },
-  { ch:6, bg:'day', svg: () => htCrowd(6) + htBody('wolf', 0, false),
-    card: () => `<div class="ht-card"><div class="xfade diff">${htMed('wolf', 'Ben', true)}<div class="xf-top">${htMed('villager3', 'Ben', true)}</div></div><div class="reveal-line">The village has hanged Ben.</div><div class="reveal-role xf-in">A Werewolf</div></div>`,
+  { ch:6, bg:'day', svg: () => htCrowd(6) + htBody('wolf', 0, false), keepCard: true, card: htHangCard,
+    run: st => { const xf = st.querySelector('.xfade'); if(!xf || xf.classList.contains('diff')) return;
+      const top = document.createElement('div'); top.className = 'xf-top'; while(xf.firstChild) top.appendChild(xf.firstChild);
+      xf.innerHTML = htMed('wolf', 'Ben', true); xf.appendChild(top); xf.classList.add('diff');
+      const role = st.querySelector('.reveal-role'); if(role){ role.classList.remove('xf-wait'); role.classList.add('xf-in'); } },
     min: 4600, t:'And then the truth. Ben was a Werewolf.' },
   // 8 How it ends
   { ch:7, bg:'day', svg: () => htCrowd(5), card: () => htTitle('The village wins'), run: () => htSfx('villageWin'), t:'Hang every wolf, and the village wins.' },
@@ -3216,8 +3225,10 @@ function renderHowTo(){
 }
 function htShow(b){
   const st = $('ht-stage'); if(!st) return;
-  st.innerHTML = `<svg viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${FIG_DEFS}<image href="${htPaint(b.bg)}" width="1280" height="720"/>${b.svg ? b.svg() : ''}</svg>` +
-    (b.card ? `<div class="ht-over">${b.card()}</div>` : '');
+  const scene = `<svg viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${FIG_DEFS}<image href="${htPaint(b.bg)}" width="1280" height="720"/>${b.svg ? b.svg() : ''}</svg>`;
+  const over = st.querySelector('.ht-over');
+  if(b.keepCard && over && over.querySelector('.xfade:not(.diff)')){ st.querySelector('svg').outerHTML = scene; }   // keep the card on screen; run() changes it
+  else st.innerHTML = scene + (b.card ? `<div class="ht-over">${b.card()}</div>` : '');
   $('ht-cap').textContent = capText(b.t);
   const sel = $('ht-ch'); if(sel) sel.value = b.ch;
   $('ht-pos').textContent = `${htState.i + 1} / ${HT_BEATS.length}`;
