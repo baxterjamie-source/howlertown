@@ -42,6 +42,7 @@ html,body{overflow-x:hidden}   /* rising names and smoke must never widen the pa
 .wrap{padding:6px 20px 72px}   /* room at the bottom for the floating Sound button */
 .top{display:flex;justify-content:space-between;align-items:baseline;color:var(--dim);font-size:15px;gap:10px}
 .timer{font-variant-numeric:tabular-nums}
+.gcode{font-size:13px;letter-spacing:.05em;opacity:.75}
 .narr{font-family:var(--serif);font-size:21px;line-height:1.42;margin:10px 0 16px;color:#f1e7cf}
 h2{font-family:var(--serif);font-weight:400;font-size:21px;margin:18px 0 4px;line-height:1.25}
 .hint{margin:0 0 12px;color:var(--dim);font-size:15px}
@@ -225,10 +226,6 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
 #sndui .note{text-shadow:0 1px 4px #000}
 .sndpanel{background:var(--slate);border:1px solid var(--line);border-radius:14px;padding:12px 16px;width:min(320px,calc(100vw - 24px));font-size:16px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
 .sndpanel b{font-family:var(--serif);font-weight:400;font-size:19px}
-/* Town Crier subtitles: the narrator's words, big and centred near the bottom of the TV. */
-#subs{position:fixed;left:50%;bottom:9vh;transform:translateX(-50%);z-index:59;pointer-events:none;max-width:76vw;text-align:center;opacity:0;transition:opacity .35s ease}
-#subs.on{opacity:1}
-#subs span{display:inline;background:rgba(8,10,16,.82);color:#f6eedb;font-family:var(--serif);font-size:clamp(20px,2.6vw,46px);line-height:1.45;padding:.12em .5em;border-radius:6px;box-decoration-break:clone;-webkit-box-decoration-break:clone;text-shadow:0 2px 6px #000}
 #sndcap{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:60;pointer-events:none;display:flex;flex-direction:column;gap:4px;align-items:center}
 #sndcap div{background:rgba(15,19,32,.88);border:1px solid var(--ember);color:var(--ember);border-radius:999px;padding:4px 12px;font-size:15px;white-space:nowrap}
 .c-paused{color:var(--rose)}
@@ -290,6 +287,7 @@ body.crier .risename{font-size:5.5vh}
 <input id="in-name" maxlength="20" autocomplete="nickname">
 <div class="row"><button class="btn pri full" data-act="create">Create a game</button></div>
 <h2>Join an open game or enter a code</h2>
+<div id="rejoin"></div>
 <div class="list" id="open-games"></div>
 <div id="my-games"></div>
 <div class="row" style="flex-wrap:nowrap"><input id="in-code" maxlength="6" placeholder="Enter code" aria-label="Game code" style="text-transform:uppercase"><button class="btn" data-act="joincode">Join</button></div>
@@ -299,7 +297,7 @@ body.crier .risename{font-size:5.5vh}
 </section>
 <section id="lobby" class="hidden"></section>
 <section id="game" class="hidden">
-<div class="top"><span id="ph-label"></span><span class="timer" id="clock"></span></div>
+<div class="top"><span id="ph-label"></span><span class="gcode" id="gcode"></span><span class="timer" id="clock"></span></div>
 <div id="hostbar" class="hostbar"></div>
 <div id="gamesettings"></div>
 <p class="narr" id="narr" aria-live="polite"></p>
@@ -635,12 +633,8 @@ function renderCaptions(){
   const ph = game.phase || {}, line = narrLine(ph);
   const n = $('narr'); if(n && n.textContent !== line && game.status !== 'lobby') n.textContent = line;
   const c = document.querySelector('#crier .c-narr'); if(c && c.textContent !== line) c.textContent = line;
-  // Big subtitles: Town Crier only (captions switch in its Sound panel), while the line is being spoken.
-  let el = $('subs'); if(!el){ el = document.createElement('div'); el.id = 'subs'; el.setAttribute('aria-hidden', 'true'); document.body.appendChild(el); }
-  const s = crier && soundPrefs.captions !== false && game.status !== 'lobby' ? spokenLine() : null;
-  const show = !!(s && s.text && now() < s.until + 1500);
-  if(show && el.dataset.text !== s.text){ el.dataset.text = s.text; el.innerHTML = `<span>${esc(s.text)}</span>`; }
-  el.classList.toggle('on', show);
+  // (The Crier's big bottom subtitles were removed on 2026-10-06: they repeated the top-left line and covered
+  // the pictures. The top-left narration line is the one place the words show.)
 }
 // "In other news…": the name lands on its own beat.
 function newsSpeech(news){
@@ -764,20 +758,16 @@ let soundOpen = false;
 function soundPanelHTML(){
   if(!soundOpen) return '';
   const sw = (k, label) => `<label class="f">${label}<select data-snd="${k}"><option value="true" ${soundPrefs[k] ? 'selected' : ''}>On</option><option value="false" ${soundPrefs[k] ? '' : 'selected'}>Off</option></select></label>`;
-  const caps = crier ? sw('captions', 'Captions (big subtitles)') : '';
-  // A Town Crier that isn't the sound device still has its own captions switch.
-  if(!isSoundDevice()) return `<div class="sndpanel"><b>Town Crier</b>${caps}<div class="row"><button class="btn small" data-act="snd-close">Close</button></div>
-    <p class="note">Sound plays on the first Town Crier.</p></div>`;
   const vs = narrVoices(), cur = narrVoice()?.voiceURI;
   const voice = vs.length ? `<label class="f">Voice<select data-snd="voice">${vs.map(v => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === cur ? 'selected' : ''}>${esc(v.name.replace(/^Microsoft |^Google /, '').slice(0, 34))}</option>`).join('')}</select></label>`
     : '<p class="note">This device has no built-in voice, so the narrator stays silent.</p>';
-  return `<div class="sndpanel"><b>Sound</b>${sw('ambient', 'Ambient sounds')}${sw('event', 'Event sounds')}${sw('narrator', 'Narrator')}${voice}${caps}
+  return `<div class="sndpanel"><b>Sound</b>${sw('ambient', 'Ambient sounds')}${sw('event', 'Event sounds')}${sw('narrator', 'Narrator')}${voice}
     <label class="f">Volume<input type="range" min="0" max="1" step="0.05" data-snd="volume" style="max-width:55%"></label>
     <div class="row"><button class="btn small" data-act="snd-test">Test sound</button>${vs.length ? '<button class="btn small" data-act="snd-voice">Test voice</button>' : ''}<button class="btn small" data-act="snd-close">Close</button></div>
     <p class="note">Missing sound files are silent. Put them in the sounds/ folder next to index.html.</p></div>`;
 }
 function soundButtonHTML(){
-  if(!game || !isSoundDevice()) return crier && game ? '<button class="btn small" data-act="snd-open">Captions</button>' : '';
+  if(!game || !isSoundDevice()) return crier && game ? '<span class="note">Sound plays on the first Town Crier.</span>' : '';
   return `<button class="btn small" data-act="snd-open">Sound</button>` + (audioLocked() ? ` <button class="btn small pri" data-act="snd-unlock">Click to enable sound</button>` : '');
 }
 function renderSoundUI(){
@@ -1537,7 +1527,7 @@ function enterGame(c){
   unsubs.push(DB.watch(gp(), g => { game = g; if(!g || g.status === 'deleted'){ leaveGame(); return; }
     if(!crier && g.kicked?.[myUid] && !g.players?.[myUid]){ leaveGame(); setTimeout(() => { const e = $('home-err'); if(e) e.textContent = 'The host removed you from the game.'; }, 50); return; }
     // Back after "Leave (bot stand-in)" (same player, same browser): take over from the bot.
-    if(!crier && g.players?.[myUid]?.standin) DB.update(gp(), { [`players.${myUid}.standin`]: null }).catch(() => {});
+    if(!crier && g.players?.[myUid]?.standin){ DB.update(gp(), { [`players.${myUid}.standin`]: null }).catch(() => {}); ls.del('howlertown_standin'); }
     ensureHostSubs(); render(); }));
   unsubs.push(DB.watchCol(`${gp()}/actions`, a => { actions = a || {}; render(); }));
   unsubs.push(DB.watch(sp(myUid), s => { mySecret = s; render(); }));
@@ -1576,15 +1566,27 @@ function ensureHostSubs(){
 }
 function leaveListeners(){ unsubs.forEach(u => u()); unsubs = []; hostSubs.forEach(u => u()); hostSubs = [];
   game = null; actions = {}; secrets = {}; mySecret = null; filler = {}; night = null; history = {}; }
+// After "Leave (bot stand-in)": the home screen offers the way back, while that game is still being played.
+function renderRejoin(){
+  const el = $('rejoin'), c = ls.get('howlertown_standin'); if(!el) return;
+  if(!c){ el.innerHTML = ''; return; }
+  DB.get(`${GAMES}/${c}`).then(g => {
+    if(g && fresh(g) && g.status === 'playing' && g.players?.[myUid])
+      el.innerHTML = `<div class="card"><b>A bot is playing for you in game ${esc(c)}.</b><div class="row"><button class="btn pri" data-act="join" data-code="${esc(c)}">Return to game ${esc(c)}</button></div></div>`;
+    else { ls.del('howlertown_standin'); el.innerHTML = ''; }
+  }).catch(() => {});
+}
 function leaveGame(){ leaveListeners(); code = null; ls.del('howlertown_current_game'); showHome(); }
 function showHome(){
   stopAllLoops(); soundKey = undefined; soundOpen = false; setHTML('sndui', '');
   $('home').classList.remove('hidden'); $('lobby').classList.add('hidden'); $('game').classList.add('hidden');
   $('in-name').value = myName; setScene('night'); fitTagline();
+  renderRejoin();
   if(!unsubOpen) unsubOpen = DB.openGames(list => {
     list = list.filter(fresh).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     $('open-games').innerHTML = list.slice(0, 15).map(g => {
-      const n = playerCount(g), capped = g.settings?.seats && g.settings.seats !== 'any', full = n >= seatCap(g);
+      // "Full" only for newcomers: someone already in the game can always get back in.
+      const n = playerCount(g), capped = g.settings?.seats && g.settings.seats !== 'any', full = n >= seatCap(g) && !g.players?.[myUid];
       const info = `<span>${esc(g.hostName)}\u2019s game<br><span class="sub">${capped ? `${n} of ${seatCap(g)} players` : `${n} player${n === 1 ? '' : 's'}`}, code ${esc(g.id)}</span></span>`;
       // Your own games get Join and Delete side by side; everyone else's row is one big Join button.
       if(isCreator(g)) return `<div class="pl">${info}<span class="marks"><button class="btn small" data-act="join" data-code="${esc(g.id)}">Join</button><button class="btn small blood" data-act="delgame" data-code="${esc(g.id)}">Delete</button></span></div>`;
@@ -2460,6 +2462,7 @@ function gameSettingsHTML(){
 function renderGame(){
   const ph = game.phase || {}, s = settingsOf(game), host = isHost();
   $('ph-label').textContent = phaseLabel(ph);
+  $('gcode').textContent = code ? 'Game ' + code : '';                // so anyone can read the code out to someone rejoining
   const narr = narrLine(ph); let panel = '';
   if(game.status === 'ended'){
     const w = game.result?.winner, pts = game.result?.points || {};
@@ -2873,6 +2876,7 @@ document.addEventListener('click', async e => {
         if(!game || game.status !== 'playing' || isHost() || !players()[myUid]) return;
         if(!confirm('Leave the game for now? A bot will play your character until you come back (rejoin with the code, on this phone).')) return;
         await DB.update(gp(), { [`players.${myUid}.standin`]: true });
+        ls.set('howlertown_standin', code);                               // the home screen offers "Return to game"
         return leaveGame();
       case 'start': return startGame();
       case 'makehost': return upd({ hostUid: u, hostName: nameOf(u) });
