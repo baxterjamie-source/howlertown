@@ -228,6 +228,14 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
 #sndui .btn{background:rgba(15,19,32,.85)}
 #sndui .note{text-shadow:0 1px 4px #000}
 .sndpanel{background:var(--slate);border:1px solid var(--line);border-radius:14px;padding:12px 16px;width:min(320px,calc(100vw - 24px));font-size:16px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.snd-off label.f{opacity:.45}
+.hostnote{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);z-index:9000;pointer-events:none;max-width:min(86vw,560px);text-align:center;
+  font-family:var(--serif);font-size:clamp(20px,5vw,38px);color:#f3e6c8;background:rgba(10,12,20,.55);border:1px solid rgba(224,162,74,.45);border-radius:16px;
+  padding:14px 22px;opacity:0;transition:opacity .5s;text-shadow:0 2px 6px #000}
+.hostnote.on{opacity:1}
+.tryit{position:fixed;inset:0;z-index:9500;background:rgba(4,6,12,.72);display:flex;align-items:center;justify-content:center;padding:16px}
+.tryit.hidden{display:none}
+.tryit .card{max-width:420px;width:100%}
 .sndpanel b{font-family:var(--serif);font-weight:400;font-size:19px}
 #sndcap{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:60;pointer-events:none;display:flex;flex-direction:column;gap:4px;align-items:center}
 #sndcap div{background:rgba(15,19,32,.88);border:1px solid var(--ember);color:var(--ember);border-radius:999px;padding:4px 12px;font-size:15px;white-space:nowrap}
@@ -351,6 +359,7 @@ body.howto-open{overflow:hidden}
 <label class="note" for="in-name">Your name</label>
 <input id="in-name" maxlength="20" autocomplete="nickname">
 <div class="row"><button class="btn pri full" data-act="create">Create a game</button></div>
+<div class="row"><button class="btn full" data-act="tryit">Try it now! (you and 7 bots)</button></div>
 <h2>Join an open game or enter a code</h2>
 <div id="rejoin"></div>
 <div class="list" id="open-games"></div>
@@ -380,10 +389,12 @@ body.howto-open{overflow:hidden}
 <div id="crier"></div>
 <div id="sndui"></div>
 <div id="intro" class="hidden" aria-hidden="true"></div>
+<div id="hostnote" class="hostnote" aria-live="polite"></div>
 <div id="reveal" class="overlay hidden" data-act="dismiss-reveal"></div>
 <div id="finale" class="overlay finale hidden"></div>
 <div id="splash" class="hidden"><div class="sp-inner"><h1 class="sp-title">Howlertown</h1><p class="sp-tag">Evil lurks among the peaceful. But who…</p>
-  <div class="sp-btns"><button class="btn sp-btn" data-act="howto">How to Play</button><button class="btn pri sp-btn" data-act="splash-start">Start</button></div></div></div>
+  <div class="sp-btns"><button class="btn sp-btn" data-act="howto">How to Play</button><button class="btn sp-btn" data-act="tryit">Try it now!</button><button class="btn pri sp-btn" data-act="splash-start">Start</button></div></div></div>
+<div id="tryit" class="tryit hidden" role="dialog" aria-label="Try it now"></div>
 <div id="howto" class="hidden" role="dialog" aria-label="How to play"></div>
 <script type="module">
 // ============================================================================
@@ -601,8 +612,13 @@ const VOICE = {
     'The mob was right… this time. The village wins.', 'The forest is quiet at last. The village wins.'],
   foolEnd: ['The Fool wins. Who is the fool now?', 'They hanged the Fool, just as the Fool wanted. The Fool wins.', 'The Fool grins from the gallows. The Fool wins.',
     'The joke is on Howlertown. The Fool wins.'],
+  // During the vote board after an ordinary verdict, as night draws in (owner-approved, 2026-10-08).
+  ponder: ['As night starts to fall, the villagers ponder the voting…', 'Dusk creeps in. The villagers study the votes, and each other.',
+    'Who voted for whom? Maybe useful as the moon slowly rises…', 'Some villagers feel a chill in the air as they study the votes…',
+    'Shadows lengthen over the square. Every vote tells a story.', 'The sun sinks low. Was the rope wise today?',
+    'Lamps are lit, doors are barred. The villagers count the votes, and their friends.', 'Night is coming. Somewhere in these names {w:hides a wolf|hide the wolves}.'],
   // HIPB bots speak for themselves when they accuse (b_…, by the reason that weighs most) and when accused (d_…).
-  // The narrator reads them as: Bram says: "…". {x} is the earlier person in the story, {d} a day number.
+  // The narrator reads them as: Bram says, "…". {x} is the earlier person in the story, {d} a day number.
   b_votedInnocent: ['{accused} voted to hang {x}, and {x} was innocent. I don’t forget that.', '{x} was innocent, and {accused} wanted them dead. Explain that.',
     'Remember {x}? Innocent. And {accused} voted for the rope.', 'Wolves vote to kill the innocent. {accused} voted to kill {x}.'],
   b_accusedInnocent: ['{accused} pointed at {x} before, and {x} was innocent. Wolves love a scapegoat.', 'The last time {accused} accused someone, it was {x}. Innocent. Why listen now?',
@@ -828,7 +844,8 @@ async function speakLine(text, style, live = () => true, test){
   if(!text || !hasSpeech() || (!test && !(isSoundDevice() && soundPrefs.narrator))) return;
   fadeAmbient(); duck(true); speaking = true;
   const st = style === 'news' ? NEWS_VOICE : SPEECH, v = narrVoice();
-  for(const p of speechParts(text)){
+  // Quote marks (a bot's own words) are for the screen; some voices read them out as "quote".
+  for(const p of speechParts(text.replace(/["“”]/g, ''))){
     if(!live()) break;
     await new Promise(res => {
       const u = new SpeechSynthesisUtterance(p.t);
@@ -850,14 +867,35 @@ setInterval(() => {
   if(!ph || game.status !== 'playing' || ph.name !== 'night' || ph.pausedAt || !isSoundDevice()) return;
   if(now() - ph.startedAt < 4000 || now() - lastNightSound < 6000) return;   // let the loud howl have the opening; no pile-ups
   if(speaking || now() < busyUntil || randomNow.size) return;               // never over speech or another sound
-  const r = Math.random(), pick = r < 1 / 22 ? 'wind' : r < 1 / 22 + 1 / 35 ? 'howlFar' : r < 1 / 22 + 1 / 35 + 1 / 45 ? 'snarl'
-    : ph.witchAlive && r < 1 / 22 + 1 / 35 + 1 / 45 + 1 / 60 ? 'cackle' : null;
+  // (The wind isn't in this draw: it comes with the published gusts, see gustAt.)
+  const r = Math.random(), pick = r < 1 / 35 ? 'howlFar' : r < 1 / 35 + 1 / 45 ? 'snarl'
+    : ph.witchAlive && r < 1 / 35 + 1 / 45 + 1 / 60 ? 'cackle' : null;
   // Hold off if it couldn't finish before the next known moment: the wolves' attack or the night's end.
   const next = Math.min(ph.endsAt || Infinity, ph.attackAt > now() ? ph.attackAt : Infinity);
   if(pick && now() + (SND_LEN[pick] || 4000) + 500 > next) return;
-  if(pick){ lastNightSound = now(); playSound(pick, { random:true }); if(pick === 'wind') fxGust(); }   // the gust you hear, you also see
+  if(pick){ lastNightSound = now(); playSound(pick, { random:true }); }
 }, 1000);
 let lastNightSound = 0;
+// Wind (owner: never the wind without the leaves, or the leaves without the wind). In a game, the sound device picks
+// each gust, day or night, and publishes gustAt; at that moment every screen blows its leaves and flag and the sound
+// device plays the wind. Outside a game (home, splash, lobby) the leaves blow silently on each screen.
+let nextGust = 0, lastGustSeen = 0;
+setInterval(() => {
+  const ph = game?.phase, t = now();
+  if(!game || game.status !== 'playing' || !ph || ph.pausedAt || !isSoundDevice() || introRunning(ph)) return;
+  if(!nextGust){ nextGust = t + 20000 + Math.random() * 25000; return; }
+  if(t < nextGust || speaking || t < busyUntil || randomNow.size || t - lastNightSound < 6000) return;
+  // Not if the wind couldn't finish before the next known moment (the wolves' attack, the phase's end): try again soon.
+  const next = Math.min(ph.endsAt || Infinity, ph.attackAt > t ? ph.attackAt : Infinity);
+  if(t + SND_LEN.wind + 500 > next){ nextGust = t + 5000; return; }
+  nextGust = t + 25000 + Math.random() * 35000; lastNightSound = t;
+  DB.update(gp(), { gustAt: t + 600 }).catch(() => {});
+}, 1000);
+setInterval(() => {
+  const g = game?.status === 'playing' ? game.gustAt : null; if(!g || g === lastGustSeen || now() < g) return;
+  lastGustSeen = g; if(now() - g > 4000 || introRunning(game.phase)) return;      // a late or stale gust is skipped
+  fxGust(); if(isSoundDevice()) playSound('wind', { random:true });
+}, 200);
 // The sound panel: on the sound device only (the Crier, or the host when there's no Crier).
 let soundOpen = false;
 function soundPanelHTML(){
@@ -1381,7 +1419,7 @@ async function stepDay(ph, t){
     if(ph.floor.stage === 'accuser'){
       // An accused bot answers for itself (HIPB), and then needs no talking time of its own.
       const u = ph.floor.accused, bot = hipbBot(u) && isAlive(u);
-      const items = [{ t: draw('accused', { accused: nameOf(u) }) }, ...(bot ? [{ t: `${nameOf(u)} says: "${hipbDefendLine(hipbFacts(), u, ph.floor.accuser)}"` }] : [])], hold = t + scriptMs(items);
+      const items = [{ t: draw('accused', { accused: nameOf(u) }) }, ...(bot ? [{ t: `${nameOf(u)} says, "${hipbDefendLine(hipbFacts(), u, ph.floor.accuser)}"` }] : [])], hold = t + scriptMs(items);
       return upd({ 'phase.floor.stage':'accused', 'phase.floor.say': mkSay(items), 'phase.floor.holdUntil': hold, 'phase.floor.endsAt': hold + (bot ? 2500 : d.speak * 1000) });
     }
     const r = ph.round + 1;
@@ -1455,7 +1493,9 @@ async function stepVote(ph, t){
   // board alone). A game-deciding verdict ends soon after the hanging.
   up.phase.say = mkSay(items);
   if(decided) up.phase.endsAt = t + scriptMs(items) + 1500;
-  else { up.phase.boardAt = t + scriptMs(items) + lead + 500; up.phase.endsAt = Math.max(t + d.verdict * 1000, up.phase.boardAt + 15000); }
+  else { up.phase.boardAt = t + scriptMs(items) + lead + 500; up.phase.endsAt = Math.max(t + d.verdict * 1000, up.phase.boardAt + 15000);
+    // While the village studies the board, one line as night draws in (the public wolf count, so it never misleads).
+    up.phase.say = mkSay([...items, { at: up.phase.boardAt + 2500, t: draw('ponder', { w: pubWolves() }) }]); }
   if(eliminated){ up[`players.${eliminated}.alive`] = false; up[`hanged.${eliminated}`] = true; }   // the hanged don't bleed
   await upd(up);
 }
@@ -1758,7 +1798,7 @@ async function claimFloor(accuser, target, quote = null, claim = null){
     if((p.accused || []).includes(target) || g.players[target]?.alive === false || g.players[accuser]?.alive === false) return null;
     const d = dur(settingsOf(g)), line = draw('accuser', { accuser: g.players[accuser]?.name, accused: g.players[target]?.name });
     // A bot says its reason itself, and then needs no talking time of its own.
-    const items = [{ t: line }, ...(quote ? [{ t: `${g.players[accuser]?.name} says: "${quote}"` }] : [])], hold = now() + scriptMs(items);
+    const items = [{ t: line }, ...(quote ? [{ t: `${g.players[accuser]?.name} says, "${quote}"` }] : [])], hold = now() + scriptMs(items);
     const key = `g${g.gameNo || 1}n${p.n}r${p.round}`;
     return { 'phase.floor': { accuser, accused: target, stage:'accuser', say: mkSay(items), holdUntil: hold, endsAt: hold + (quote ? 2500 : d.speak * 1000) },
       'phase.accused': [...(p.accused || []), target],
@@ -1796,7 +1836,7 @@ function hipbPanelHTML(){
 // ---- 10. HOST CONTROLS ----------------------------------------------------------
 async function togglePause(){
   const ph = game.phase; if(!ph) return;
-  if(!ph.pausedAt) return upd({ 'phase.pausedAt': now() });
+  if(!ph.pausedAt) return upd({ 'phase.pausedAt': now(), pausedBy: game.hostName || nameOf(myUid) });
   const shift = now() - ph.pausedAt; const up = { 'phase.pausedAt': null };
   if(ph.endsAt) up['phase.endsAt'] = ph.endsAt + shift;
   if(ph.holdUntil) up['phase.holdUntil'] = ph.holdUntil + shift;
@@ -1814,8 +1854,10 @@ async function skipAhead(){
     for(const u of uids().filter(u => !ph.picks?.[u])) if(free.length) await drawCard(u, free.pop());
     return;
   }
-  if(ph.floor) return upd({ 'phase.floor.endsAt': t });
-  const up = { 'phase.endsAt': t }; if(ph.wolfEndsAt) up['phase.wolfEndsAt'] = t;
+  // Every screen shows "Jamie skipped ahead" for a moment (skipAt is on the game, since the phase may end now).
+  const note = { skipAt: t, skipBy: game.hostName || nameOf(myUid) };
+  if(ph.floor) return upd({ 'phase.floor.endsAt': t, ...note });
+  const up = { 'phase.endsAt': t, ...note }; if(ph.wolfEndsAt) up['phase.wolfEndsAt'] = t;
   return upd(up);
 }
 
@@ -1832,6 +1874,30 @@ async function createGame(){
   await DB.set(`${GAMES}/${c}`, { status:'lobby', createdAt: now(), createdBy: myUid, hostUid: myUid, hostName: name, hostBeat: now(),
     settings: DEFAULTS, players: { [myUid]: { name, alive:true, bot:false, joinedAt: now() } }, revealed:{} });
   enterGame(c);
+}
+// "Try it now!" (owner, 2026-10-08): one player and 7 bots, with the Seer, Witch and Doctor on, straight to the deal.
+// A real game, but practice:true keeps it off the open games list.
+function openTry(){
+  const n = $('in-name')?.value.trim() || ls.get('howlertown_name') || '';
+  $('tryit').innerHTML = `<div class="card"><h2 style="margin-top:0">Try it now!</h2>
+    <p>This will set up a game for one player to play with 7 bots, with the Seer, Witch and Doctor in play. Proceed?</p>
+    <label class="f">Your name<input id="try-name" maxlength="16" value="${esc(n)}" autocomplete="nickname"></label><p class="warn" id="try-err"></p>
+    <div class="row"><button class="btn" data-act="try-back">Go Back</button><button class="btn pri" data-act="try-go">Proceed</button></div></div>`;
+  $('tryit').classList.remove('hidden');
+}
+const closeTry = () => { $('tryit').classList.add('hidden'); $('tryit').innerHTML = ''; };
+async function tryItNow(){
+  const name = ($('try-name')?.value || '').trim(); if(!name){ $('try-err').textContent = 'Enter your name first.'; return; }
+  myName = name; ls.set('howlertown_name', name); if($('in-name')) $('in-name').value = name;
+  closeTry(); if(!$('splash').classList.contains('hidden')) endSplash();
+  const c = genCode(), t = now(), players = { [myUid]: { name, alive:true, bot:false, joinedAt: t } };
+  shuffle(BOT_NAMES.filter(n => n.toLowerCase() !== name.toLowerCase())).slice(0, 7).forEach((n, i) =>
+    players[`bot_${Math.random().toString(36).slice(2, 9)}`] = { name: n, alive:true, bot:true, joinedAt: t + 1 + i });
+  await DB.set(`${GAMES}/${c}`, { status:'lobby', practice:true, createdAt: t, createdBy: myUid, hostUid: myUid, hostName: name, hostBeat: t,
+    settings: { ...DEFAULTS, seer:true, witch:true, doctor:true }, players, revealed:{} });
+  enterGame(c);
+  for(let i = 0; i < 60 && !(game && code === c && uids().length === 8); i++) await sleep(100);
+  if(game && code === c && game.status === 'lobby') await startGame();
 }
 async function joinGame(c){
   const name = readName(); if(!name) return;
@@ -1906,7 +1972,8 @@ function showHome(){
   $('in-name').value = myName; setScene('night'); fitTagline();
   renderRejoin();
   if(!unsubOpen) unsubOpen = DB.openGames(list => {
-    list = list.filter(fresh).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    // "Try it now!" games are private.
+    list = list.filter(g => fresh(g) && !g.practice).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     $('open-games').innerHTML = list.slice(0, 15).map(g => {
       // "Full" only for newcomers: someone already in the game can always get back in.
       const n = playerCount(g), capped = g.settings?.seats && g.settings.seats !== 'any', full = n >= seatCap(g) && !g.players?.[myUid];
@@ -2086,8 +2153,8 @@ function fxGust(){
     g.animate(kf, { duration: rand(4200, 6500), delay: rand(0, 1500), easing:'linear', fill:'both' }).finished.then(() => g.remove());
   }
 }
-// Silent gusts now and then on every screen, day or night (the sound device also gusts with each wind sound).
-setTimeout(function gusts(){ if(document.visibilityState === 'visible' && !introRunning(game?.phase)) fxGust(); setTimeout(gusts, 25000 + Math.random() * 35000); }, 30000);
+// Outside a game, silent gusts now and then on each screen. In a game, gusts come only from gustAt (with the wind).
+setTimeout(function gusts(){ if(document.visibilityState === 'visible' && game?.status !== 'playing') fxGust(); setTimeout(gusts, 25000 + Math.random() * 35000); }, 30000);
 // Fog at night: soft banks drift slowly across the edge of the forest, and wisps creep down the forest road.
 const FOG_BANKS = [[200, 345, 260], [620, 360, 220], [1050, 340, 260], [430, 395, 200], [840, 400, 200]];
 function fxInit(){
@@ -2279,6 +2346,7 @@ function renderLobby(){
       ${sel('parity', [['smart','Smart'],['always','Always'],['never','Never']], 'End when wolves equal villagers')}
       ${sel('parityTimer', [['short','Halved'],['normal','Normal'],['sudden','15 seconds']], 'Wolf timer at parity')}
       ${sel('foolWin', [['continue','Game continues'],['end','Game ends']], 'When the Fool is hanged')}`)}
+    ${host ? lobbySec('sound', 'Sound', liveCriers().length ? 'Controlled by Town Crier' : `${['ambient', 'event', 'narrator'].filter(k => soundPrefs[k]).length} of 3 on`, hostSoundHTML()) : ''}
     ${host ? lobbySec('test', 'Test mode', s.test.on ? 'On' : 'Off', `
       ${sel('test.on', onoff, 'Test mode', 'test.on')}
       ${s.test.on ? `
@@ -2781,8 +2849,28 @@ function gameSettingsHTML(){
     ${sel('parityTimer', [['short','Halved'],['normal','Normal'],['sudden','15 seconds']], 'Wolf timer at parity')}
     ${s.fool ? sel('foolWin', [['continue','Game continues'],['end','Game ends']], 'When the Fool is hanged') : ''}
     <p class="note">Locked for this game: the roles (${esc(onRoles)}) and the game size.</p>
+    <div class="gset-h">Sound</div>${hostSoundHTML()}
     <div class="row"><button class="btn small" data-act="gset">Close</button></div></div>`;
 }
+// The host's sound controls (lobby and in-game Settings): this device's own switches. With a Town Crier
+// connected the Crier plays the sound, so they're shown greyed out.
+function hostSoundHTML(){
+  const off = liveCriers().length > 0, dis = off ? 'disabled' : '';
+  const sw = (k, label) => `<label class="f">${label}<select data-snd="${k}" ${dis}><option value="true" ${soundPrefs[k] ? 'selected' : ''}>On</option><option value="false" ${soundPrefs[k] ? '' : 'selected'}>Off</option></select></label>`;
+  return `<div class="${off ? 'snd-off' : ''}">${off ? '<p class="note" style="margin:2px 0">Controlled by Town Crier</p>' : ''}${sw('ambient', 'Ambient sounds')}${sw('event', 'Event sounds')}${sw('narrator', 'Narrator')}
+    <label class="f">Volume<input type="range" min="0" max="1" step="0.05" value="${soundPrefs.volume}" data-snd="volume" style="max-width:55%" ${dis}></label>
+    ${off ? '' : '<div class="row"><button class="btn small" data-act="snd-test">Test sound</button></div>'}</div>`;
+}
+// On every screen, the host's too: "Game paused by host (Jamie)" stays up while paused; "Jamie skipped ahead"
+// shows for 3 s. The text stays put while it fades out.
+setInterval(() => {
+  const el = $('hostnote'); if(!el) return;
+  const ph = game?.status === 'playing' ? game.phase : null;
+  const txt = ph?.pausedAt ? `Game paused by host (${game.pausedBy || game.hostName || 'the host'})`
+    : ph && game.skipAt && now() - game.skipAt < 3000 ? `${game.skipBy || 'The host'} skipped ahead` : '';
+  if(txt) el.textContent = txt;
+  el.classList.toggle('on', !!txt);
+}, 250);
 function renderGame(){
   const ph = game.phase || {}, s = settingsOf(game), host = isHost();
   $('ph-label').textContent = phaseLabel(ph);
@@ -3186,6 +3274,9 @@ document.addEventListener('click', async e => {
   try{
     switch(a){
       case 'create': return createGame();
+      case 'tryit': return openTry();
+      case 'try-back': return closeTry();
+      case 'try-go': return tryItNow();
       case 'joincode': return joinGame($('in-code').value);
       case 'crier-join': return joinAsCrier($('in-crier-code').value);
       case 'splash': return showSplash();
