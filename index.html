@@ -233,6 +233,7 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
   font-family:var(--serif);font-size:clamp(20px,5vw,38px);color:#f3e6c8;background:rgba(10,12,20,.55);border:1px solid rgba(224,162,74,.45);border-radius:16px;
   padding:14px 22px;opacity:0;transition:opacity .5s;text-shadow:0 2px 6px #000}
 .hostnote.on{opacity:1}
+.recap-ro{margin:4px 0 10px 14px;padding-left:12px;border-left:2px solid var(--line)}.recap-ro h4{margin:6px 0 4px;font-weight:600}
 .bal{margin:12px 0 6px}.bal-l{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:14px;margin-bottom:4px}.bal-l b{font-family:var(--serif);font-weight:400;font-size:17px}
 .bal-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;border:1px solid var(--line)}.bal-bar i{display:block;height:100%}
 .bal-bar .bw{background:#b3352a}.bal-bar .bf{background:#c9a227}.bal-bar .bv{flex:1;background:#4a78a8}.bal .note{margin:4px 0 0}
@@ -1353,7 +1354,7 @@ async function stepNight(ph, t){
   const locked = nt && (nt.wolfTarget || nt.wolfFailed);
   if(!locked){
     const picks = wolves.map(u => act(u)?.target || null);
-    if(wolves.length && picks.every(p => p && p === picks[0]) && isAlive(picks[0])){ await lockWolves(n, picks[0], false); return; }
+    if(wolves.length && picks.every(p => p && p === picks[0]) && isAlive(picks[0]) && secrets[picks[0]]?.role !== 'werewolf'){ await lockWolves(n, picks[0], false); return; }
     if(!wolves.length || t >= (ph.wolfEndsAt || ph.endsAt)){ await lockWolves(n, null, true); return; }
   }
   // The silly question moves on once every free player has answered (at least 2.5 s per question).
@@ -1395,12 +1396,12 @@ async function resolveNight(ph){
   if(savers.length) saved = true;
   const deaths = [];
   if(victim && !saved) deaths.push(victim);
-  const kills = wacts.filter(x => x.a.kill && secrets[x.u].potions?.kill);
+  const kills = wacts.filter(x => x.a.kill && x.a.kill !== x.u && secrets[x.u].potions?.kill);       // never herself
   for(const { a } of kills) if(isAlive(a.kill) && !deaths.includes(a.kill)) deaths.push(a.kill);
   for(const { u, a } of wacts){
     const p = { ...secrets[u].potions }, used = {};
     if(a.save && victim && p.save){ p.save = false; used['used.save'] = victim; }
-    if(a.kill && p.kill){ p.kill = false; used['used.kill'] = a.kill; }
+    if(a.kill && a.kill !== u && p.kill){ p.kill = false; used['used.kill'] = a.kill; }
     secrets[u].potions = p; await DB.update(sp(u), { potions: p, ...used });
   }
   // Each Doctor's role card lists everyone they have guarded, in order.
@@ -1806,7 +1807,8 @@ async function runBots(){
       if(r === 'werewolf' && !locked){
         if(t < hipbAt(b, 'w' + n, start + .15 * N, start + .5 * N)) continue;
         const mates = (secrets[b]?.pack || []).filter(u => u !== b && isAlive(u));
-        const mp = mates.map(u => actions[u]?.n === n ? actions[u].target : null).filter(Boolean);
+        // A packmate's pick is followed only if it's real prey (never a wolf, never the dead).
+        const mp = mates.map(u => actions[u]?.n === n ? actions[u].target : null).filter(u => u && isAlive(u) && !(secrets[b]?.pack || []).includes(u));
         // Lead with the best kill; once a packmate has chosen, go along with them so the pack agrees.
         if(!mine){ const tg = mp.length ? rnd(mp) : hipbPick(hipbBrain(F, b).plan.opts); if(tg) await DB.set(ap(b), { n, kind:'wolf', target: tg }); }
         else if(mp.length && !mp.includes(a.target) && Math.random() < .25) await DB.set(ap(b), { n, kind:'wolf', target: rnd(mp) });
@@ -1952,11 +1954,18 @@ async function tryItNow(){
   for(let i = 0; i < 60 && !(game && code === c && uids().length === 8); i++) await sleep(100);
   if(game && code === c && game.status === 'lobby') await startGame();
 }
+// Names must be unique in a game, or the recap can't tell two Martas apart: a clash gets a number ("Marta 2").
+function uniqueName(g, name, me){
+  const taken = new Set(Object.entries(g?.players || {}).filter(([u, p]) => p && u !== me).map(([, p]) => (p.name || '').toLowerCase()));
+  let n = name, i = 2; while(taken.has(n.toLowerCase())) n = `${name} ${i++}`;
+  return n;
+}
 async function joinGame(c){
-  const name = readName(); if(!name) return;
+  let name = readName(); if(!name) return;
   c = (c || '').trim().toUpperCase(); if(!c) return;
   const g = await DB.get(`${GAMES}/${c}`);
   if(!fresh(g)){ $('home-err').textContent = 'No game with that code.'; return; }
+  name = uniqueName(g, name, myUid);
   if(!g.players?.[myUid]){
     if(g.status !== 'lobby'){ $('home-err').textContent = 'That game has already started.'; return; }
     if(playerCount(g) >= seatCap(g)){ $('home-err').textContent = 'That game is full.'; return; }
@@ -2072,10 +2081,12 @@ const myFiller = () => (filler?.n === game?.phase?.n && filler.picks?.[myUid]?.r
 async function act(kind, data){
   const ph = game?.phase;
   if(kind === 'night-pick'){ const r = mySecret?.role;
+    if(r === 'werewolf' && (mySecret.pack || []).includes(data.u)) return;     // the pack never hunts its own
     await DB.set(ap(myUid), { n: ph.n, kind: r, target: data.u, done: r !== 'werewolf' }); }
   if(kind === 'filler'){ if(myFiller() || filler?.n !== ph.n) return;
     await DB.update(`${gp()}/live/filler`, { [`picks.${myUid}`]: { r: filler.round, t: data.u || null } }).catch(() => {}); }
-  if(kind === 'witch'){ await DB.set(ap(myUid), { n: ph.n, kind:'witch', save: !!data.save, kill: data.kill || null, done:true }); }
+  // The Witch can never poison herself (her list leaves her out; this is the safety net).
+  if(kind === 'witch'){ await DB.set(ap(myUid), { n: ph.n, kind:'witch', save: !!data.save, kill: data.kill && data.kill !== myUid ? data.kill : null, done:true }); }
   if(kind === 'accuse') await claimFloor(myUid, data.u);
   if(kind === 'ready') await upd({ [`phase.ready.${myUid}`]: true });
   if(kind === 'vote' && now() >= (game.phase?.showUntil || 0)) await upd({ [`phase.votes.${myUid}`]: data.u });
@@ -3019,10 +3030,16 @@ function recapHTML(){
     for(const [v, c] of Object.entries(e.votes || {})) (c === 'abstain' ? abst : (by[c] = by[c] || [])).push(v);
     const votes = Object.entries(by).sort((a, b) => b[1].length - a[1].length || nameOf(a[0]).localeCompare(nameOf(b[0])));
     const RR = u => { const r = game.revealed?.[u]; return r ? (r === 'werewolf' ? 'a Werewolf' : r === 'villager' ? 'a Villager' : 'the ' + roleName(r)) : 'role unknown'; };
-    const res = e.runoff ? `Tie between ${e.runoff.map(N).join(' and ')}, so a runoff.` : e.eliminated ? `<b>${N(e.eliminated)}</b> (${RR(e.eliminated)}) was hanged by the village.` : 'No one was hanged.';
-    return `<h3>Day ${e.n}${e.round === 2 ? ', runoff' : ''}</h3>` +
-      (votes.length ? votes.map(([c, vs]) => `<p><b>${N(c)}</b> (${vs.length}: ${vs.map(N).sort().join(', ')})</p>`).join('') : '<p class="note">Nobody voted for anyone.</p>') +
+    // A runoff's result is its own entry ("Day N, runoff"); if there is none, the game ended before it was decided.
+    const next = ents[ents.indexOf(e) + 1], unfinished = e.runoff && !(next?.type === 'vote' && next.n === e.n && next.round === 2);
+    const tieAgain = e.round === 2 && !e.eliminated && votes.length > 1 && votes[0][1].length === votes[1][1].length;
+    const res = e.runoff ? `Tie between ${e.runoff.map(N).join(' and ')}, so a runoff.${unfinished ? ' The game ended before the runoff was decided.' : ''}`
+      : e.eliminated ? `<b>${N(e.eliminated)}</b> (${RR(e.eliminated)}) was hanged by the village.`
+      : tieAgain ? 'The runoff tied too, so no one was hanged.' : 'No one was hanged.';
+    const body = (votes.length ? votes.map(([c, vs]) => `<p><b>${N(c)}</b> (${vs.length}: ${vs.map(N).sort().join(', ')})</p>`).join('') : '<p class="note">Nobody voted for anyone.</p>') +
       (abst.length ? `<p class="note">Abstained: ${abst.map(N).sort().join(', ')}</p>` : '') + `<p>${res}</p>`;
+    // A runoff belongs to its day: an indented block under it, not a new heading.
+    return e.round === 2 ? `<div class="recap-ro"><h4>Runoff</h4>${body}</div>` : `<h3>Day ${e.n}</h3>${body}`;
   });
   return `<div class="recap"><h2>How it happened</h2>${settingsOf(game).votes === 'anonymous' ? '<p class="note">Votes were anonymous during the game. Here is how everyone voted.</p>' : ''}${parts.join('')}</div>`;
 }
