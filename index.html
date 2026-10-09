@@ -235,6 +235,10 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
   font-family:var(--serif);font-size:clamp(20px,5vw,38px);color:#f3e6c8;background:rgba(10,12,20,.55);border:1px solid rgba(224,162,74,.45);border-radius:16px;
   padding:14px 22px;opacity:0;transition:opacity .5s;text-shadow:0 2px 6px #000}
 .hostnote.on{opacity:1}
+#passive{display:none}
+#passive.on{display:grid;place-items:center;position:fixed;inset:0;z-index:100000;background:rgba(6,8,14,.94);padding:16px}
+#passive .pv-box{max-width:420px;text-align:center;color:#f3e6c8;border:1px solid rgba(224,162,74,.45);border-radius:16px;padding:22px;background:rgba(14,17,28,.9)}
+#passive .pv-box h2{font-family:var(--serif);margin:0 0 8px}
 .ver{position:fixed;left:50%;bottom:4px;transform:translateX(-50%);z-index:99999;pointer-events:none;white-space:nowrap;font-size:12px;letter-spacing:.04em;
   color:#e3d3a6;background:rgba(5,7,12,.82);border:1px solid rgba(201,184,143,.25);border-radius:8px;padding:1px 8px}
 .rules{position:fixed;inset:0;z-index:8500;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(6,8,14,.55);
@@ -482,7 +486,7 @@ function loadBuffer(file){
   if(!(file in buffers)) buffers[file] = fetch('sounds/' + file).then(r => r.ok ? r.arrayBuffer() : null).then(b => b && audio().decodeAudioData(b)).catch(() => null);
   return buffers[file];
 }
-const isSoundDevice = () => !!game && (crier ? liveCriers()[0] === crierId : isHost() && !liveCriers().length);
+const isSoundDevice = () => !!game && !winPassive && (crier ? liveCriers()[0] === crierId : isHost() && !liveCriers().length);
 // The sound device fetches and decodes every sound up front, so the first howl isn't late.
 let soundsPreloaded = false;
 function preloadSounds(){
@@ -1049,7 +1053,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const now = () => Date.now();
 // Shown small at the bottom of every screen, so it's easy to tell which version a device is running (owner,
 // 2026-10-09). Bump it with every change that's uploaded: date, then a letter for each upload that day.
-const APP_VERSION = '2026-10-09 h';
+const APP_VERSION = '2026-10-09 i';
 // The page is already parsed when this module runs.
 if(document.getElementById('ver')) document.getElementById('ver').textContent = 'v ' + APP_VERSION;
 const rnd = a => a[Math.floor(Math.random() * a.length)];
@@ -1239,6 +1243,33 @@ const sp = u => `${gp()}/secrets/${u}`;
 let crier = false;
 const crierId = (() => { try{ let id = sessionStorage.getItem('howlertown_crier_id'); if(!id){ id = 'c_' + uuid().slice(0, 8); sessionStorage.setItem('howlertown_crier_id', id); } return id; }catch{ return 'c_' + uuid().slice(0, 8); } })();
 const isHost = () => !crier && game && game.hostUid === myUid;
+// One window per game per browser (owner, 2026-10-09): two host windows doubled every narrator line and ran the
+// host engine and bots twice. A tab that opens a game tells the others; an older tab with the same game goes
+// passive (covered, no sound, no host engine) until "Use it here" takes it back. Other games in other tabs, and
+// Town Crier tabs, aren't affected. Only works within one browser (BroadcastChannel).
+const WIN_TAB = Math.random().toString(36).slice(2, 10);
+let winPassive = false;
+const winCh = (() => { try{ return new BroadcastChannel('howlertown_window'); }catch{ return null; } })();
+function claimWindow(){
+  if(!code || crier) return;
+  const was = winPassive; winPassive = false; renderPassive();
+  winCh?.postMessage({ code, tab: WIN_TAB });
+  if(was && game) render();
+}
+function renderPassive(){
+  let el = document.getElementById('passive');
+  if(!el){ el = document.createElement('div'); el.id = 'passive'; document.body.appendChild(el); }
+  el.className = winPassive ? 'on' : '';
+  el.innerHTML = winPassive ? `<div class="pv-box"><h2>This game is open in another window</h2><p class="hint">Only one window per game can run in this browser, so the narrator and the game don’t run twice.</p><button class="btn pri" data-act="win-claim">Use it here</button></div>` : '';
+}
+if(winCh) winCh.onmessage = e => {
+  const m = e.data;
+  if(!m || m.tab === WIN_TAB || crier || !code || m.code !== code || winPassive) return;
+  winPassive = true;
+  try{ stopAllLoops(); }catch{}
+  try{ speechSynthesis.cancel(); }catch{}
+  renderPassive();
+};
 const players = () => game?.players || {};
 const uids = () => Object.keys(players()).filter(u => players()[u]).sort((a, b) => (players()[a].joinedAt || 0) - (players()[b].joinedAt || 0));
 const aliveUids = () => uids().filter(u => players()[u].alive !== false);
@@ -1645,7 +1676,7 @@ async function endGame(winner){
 }
 let ticking = false;
 async function hostTick(){
-  if(ticking || !game || !isHost() || game.status !== 'playing' || !game.phase || game.phase.pausedAt) return;
+  if(ticking || winPassive || !game || !isHost() || game.status !== 'playing' || !game.phase || game.phase.pausedAt) return;
   ticking = true;
   try{
     const ph = game.phase, t = now();
@@ -1665,7 +1696,7 @@ async function hostTick(){
   finally{ ticking = false; }
 }
 setInterval(hostTick, 600);
-setInterval(() => { if(game && isHost() && game.status !== 'ended') upd({ hostBeat: now() }).catch(() => {}); }, 5000);
+setInterval(() => { if(game && !winPassive && isHost() && game.status !== 'ended') upd({ hostBeat: now() }).catch(() => {}); }, 5000);
 
 // ---- 9. BOTS (Test mode; driven by the host's device) ---------------------------
 // ---- 9b. HIPB: the Howlerville Intelligence Player Bot ---------------------------------------------------
@@ -2039,6 +2070,7 @@ async function joinGame(c){
 }
 function enterGame(c){
   leaveListeners(); code = c; ls.set('howlertown_current_game', c);
+  claimWindow();
   unsubs.push(DB.watch(gp(), g => { game = g; if(!g || g.status === 'deleted'){ leaveGame(); return; }
     if(!crier && g.kicked?.[myUid] && !g.players?.[myUid]){ leaveGame(); setTimeout(() => { const e = $('home-err'); if(e) e.textContent = 'The host removed you from the game.'; }, 50); return; }
     // Back after "Leave (bot stand-in)" (same player, same browser): take over from the bot.
@@ -2093,7 +2125,7 @@ function renderRejoin(){
     else { ls.del('howlertown_standin'); el.innerHTML = ''; }
   }).catch(() => {});
 }
-function leaveGame(){ leaveListeners(); code = null; ls.del('howlertown_current_game'); showHome(); }
+function leaveGame(){ leaveListeners(); code = null; winPassive = false; renderPassive(); ls.del('howlertown_current_game'); showHome(); }
 function showHome(){
   stopAllLoops(); soundKey = undefined; soundOpen = false; setHTML('sndui', '');
   $('home').classList.remove('hidden'); $('lobby').classList.add('hidden'); $('game').classList.add('hidden');
@@ -3731,6 +3763,7 @@ document.addEventListener('click', async e => {
   const a = el.dataset.act, u = el.dataset.u;
   try{
     switch(a){
+      case 'win-claim': return claimWindow();
       case 'create': return createGame();
       case 'tryit': return openTry();
       case 'try-back': return closeTry();
