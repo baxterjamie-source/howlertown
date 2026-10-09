@@ -51,7 +51,11 @@ h2{font-family:var(--serif);font-weight:400;font-size:21px;margin:18px 0 4px;lin
 button.pl{cursor:pointer}
 button.pl:hover{border-color:#4a5470}
 .pl.sel{border-color:var(--ember);background:rgba(224,162,74,.08)}
-.pl[data-act="witch-cycle"],.pl[data-act="witch-cycle"]:hover,.pl[data-act="witch-cycle"]:focus{border-color:var(--line);background:transparent;outline:none;-webkit-tap-highlight-color:transparent}
+/* Night selections all look alike (owner, 2026-10-09), so a glance over a shoulder can't tell the role: rows never
+   change border or background (no selected, hover, focus or tap look); the only sign of a choice is the small word
+   beside the name (You, Yes, No, n/a, Save, Kill, a packmate's initials), a grey pill with a faint pale halo. */
+.nightsel .pl,.nightsel .pl.sel,.nightsel .pl:hover,.nightsel .pl:focus,.nightsel .pl:active{border-color:var(--line);background:transparent;outline:none;-webkit-tap-highlight-color:transparent}
+.nightsel .mk,.nightsel .mk.you{background:#2a3044;color:#d9cfb8;box-shadow:0 0 7px 1px rgba(232,224,205,.28)}
 .pl.dead{opacity:.45}
 .pl .sub{color:var(--dim);font-size:14px}
 .marks{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
@@ -1053,7 +1057,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const now = () => Date.now();
 // Shown small at the bottom of every screen, so it's easy to tell which version a device is running (owner,
 // 2026-10-09). Bump it with every change that's uploaded: date, then a letter for each upload that day.
-const APP_VERSION = '2026-10-09 i';
+const APP_VERSION = '2026-10-09 j';
 // The page is already parsed when this module runs.
 if(document.getElementById('ver')) document.getElementById('ver').textContent = 'v ' + APP_VERSION;
 const rnd = a => a[Math.floor(Math.random() * a.length)];
@@ -2181,7 +2185,7 @@ async function act(kind, data){
   if(kind === 'night-pick'){ const r = mySecret?.role;
     if(r === 'werewolf' && (mySecret.pack || []).includes(data.u)) return;     // the pack never hunts its own
     await DB.set(ap(myUid), { n: ph.n, kind: r, target: data.u, done: r !== 'werewolf' }); }
-  if(kind === 'filler'){ if(myFiller() || filler?.n !== ph.n) return;
+  if(kind === 'filler'){ if(filler?.n !== ph.n) return;
     await DB.update(`${gp()}/live/filler`, { [`picks.${myUid}`]: { r: filler.round, t: data.u || null } }).catch(() => {}); }
   // The Witch can never poison herself (her list leaves her out; this is the safety net).
   // Nobody on her save list can be on her poison list (resolveNight checks again).
@@ -3073,15 +3077,16 @@ function setText(id, s){ if(_last[id] !== s){ _last[id] = s; $(id).textContent =
 // Power roles' results appear as that one line, so a glance can't tell roles apart.
 // The shared silly question. Only your own pick is marked: showing others' picks would give away who is
 // free to answer (and so hint at roles). Once you've answered, it waits for the rest of the village.
+// The pick can be changed until the question moves on (owner, 2026-10-09): it isn't locked on the first tap.
 function fillerUI(n, note){
   const ready = filler?.n === n, q = ready ? FILLERS[filler.q % FILLERS.length][0] : 'Who sleeps with one eye open?';
   const mine = myFiller(), picked = !!mine;
   const others = aliveUids().filter(u => u !== myUid);
-  return `<h2>${esc(q)}</h2><p class="hint">${note || (picked ? 'Waiting for the rest of the village…' : 'Pick anyone. The village is choosing too.')}</p>` +
-    playerList(others, { act: picked || !ready ? '' : 'filler', sel: mine?.t,
-      marks: u => mine?.t === u ? [{ label:'You', you:true }] : [] }) + noOne(picked || !ready ? '' : 'filler-none', picked && !mine.t ? 'No one (you)' : 'No one');
+  return `<h2>${esc(q)}</h2><p class="hint">${note || (picked ? 'You can change your pick until the village has chosen.' : 'Pick anyone. The village is choosing too.')}</p>` +
+    playerList(others, { act: ready ? 'filler' : '',
+      marks: u => mine?.t === u ? [{ label:'You', you:true }] : [] }) + noOne(ready ? 'filler-none' : '', 'No one', picked && !mine.t);
 }
-const noOne = (act, label) => `<div class="list" style="margin-top:7px"><button class="pl" data-act="${act}"><span>${label}</span><span class="marks"></span></button></div>`;
+const noOne = (act, label, mine) => `<div class="list" style="margin-top:7px"><button class="pl" data-act="${act}"><span>${label}</span><span class="marks">${mine ? '<span class="mk you">You</span>' : ''}</span></button></div>`;
 let witchNight = 0, witchList = [], witchPoison = null, seerNight = 0, seerTap = null;
 function nightPanel(ph){
   const n = ph.n, r = mySecret?.role, a = myAct(n), al = aliveUids();
@@ -3374,7 +3379,7 @@ function renderGame(){
               : `<p class="hint">Every card is drawn. Waiting for ${esc(game.hostName || 'the host')} to start the game.</p>`)
       : `<p class="hint">${ph.picks?.[myUid] ? 'Waiting for the others to draw.' : now() < ph.showAt ? 'Shuffling the cards…' : 'Tap a card to draw your role.'} ${drawn} of ${total} have drawn.</p>`;
   } else if(ph.name === 'night'){
-    panel = isAlive(myUid) ? nightPanel(ph) : `<div class="card">You are dead. Watch the night in silence.</div>`;
+    panel = isAlive(myUid) ? `<div class="nightsel">${nightPanel(ph)}</div>` : `<div class="card">You are dead. Watch the night in silence.</div>`;
   } else if(ph.name === 'dawn'){
     panel = dawnDetail(ph);
   } else if(ph.name === 'day'){
