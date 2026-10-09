@@ -96,6 +96,7 @@ fieldset{border:1px solid var(--line);border-radius:12px;padding:6px 14px 10px;m
 legend{padding:0 6px;font-family:var(--serif);font-size:18px}
 .gset{margin:10px 0}
 .gset-h{font-family:var(--serif);font-size:17px;margin:10px 0 2px;color:var(--ember)}
+.gset-sub{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;opacity:.75;margin:12px 0 2px}
 .xfade{position:relative;width:fit-content;margin:0 auto}
 /* The hanging reveal (owner: slow and blurry): the disguise blurs away while the true face sharpens through it. */
 /* Only the faces blur; the frame and name stay crisp. */
@@ -2402,21 +2403,10 @@ function renderLobby(){
       ${sel('doctor', counts, 'Doctor')}
       <p class="note">${list.length >= DOUBLE_FROM ? 'Big game: up to 2 each of the Seer, Witch and Doctor. They work alone and don’t know each other.' : `Two of a role is possible from ${DOUBLE_FROM} players.`}</p>
       ${sel('fool', onoff, 'Town Fool')}`)}
-    ${lobbySec('day', 'Day', s.dayMode === 'open' ? `Open, ${s.discussion / 60} min` : `Accusations, ${s.rounds} round${+s.rounds === 1 ? '' : 's'}, ${s.speak} s each`, `
-      ${sel('dayMode', [['structured','Structured'],['open','Open']], 'Discussion')}
-      ${sel('rounds', [[1,'1'],[2,'2'],[3,'3'],[4,'4']], 'Accusation rounds')}
-      ${sel('speak', [[15,'15 s'],[20,'20 s'],[30,'30 s'],[45,'45 s']], 'Speaking time')}
-      ${sel('discussion', [[120,'2 min'],[180,'3 min'],[300,'5 min'],[420,'7 min']], 'Open discussion time')}`)}
-    ${lobbySec('night', 'Night and voting', `Night ${s.night} s, vote ${s.voteTime} s, ${s.votes === 'public' ? 'public' : 'anonymous'}, roles ${s.reveal ? 'revealed' : 'hidden'}`, `
-      ${sel('night', [[45,'45 s'],[60,'60 s'],[90,'90 s'],[120,'2 min']], 'Night length')}
-      ${sel('voteTime', [[30,'30 s'],[45,'45 s'],[60,'60 s'],[90,'90 s']], 'Voting time')}
-      ${sel('votes', [['public','Public'],['anonymous','Anonymous']], 'Votes')}
-      ${sel('reveal', [['true','Reveal'],['false','Keep hidden']], 'Role of the eliminated')}`)}
-    ${lobbySec('voteinfo', 'Vote information', (n => n ? `${n} of 3 on` : 'Off')([s.viMe, s.viInnocent, s.viWolf].filter(Boolean).length), voteInfoSettingsHTML(sel, onoff, s))}
-    ${lobbySec('end', 'Endgame', `Parity: ${s.parity}${s.fool ? `, hanged Fool: ${s.foolWin === 'end' ? 'game ends' : 'game continues'}` : ''}`, `
-      ${sel('parity', [['smart','Smart'],['always','Always'],['never','Never']], 'End when wolves equal villagers')}
-      ${sel('parityTimer', [['short','Halved'],['normal','Normal'],['sudden','15 seconds']], 'Wolf timer at parity')}
-      ${sel('foolWin', [['continue','Game continues'],['end','Game ends']], 'When the Fool is hanged')}`)}
+    ${lobbySec('global', 'Global', SET_SUMMARY.global(s), SET_GROUPS.global(sel, s, onoff))}
+    ${lobbySec('night', 'Night', SET_SUMMARY.night(s), SET_GROUPS.night(sel, s, onoff))}
+    ${lobbySec('day', 'Day', SET_SUMMARY.day(s), SET_GROUPS.day(sel, s, onoff))}
+    ${lobbySec('voting', 'Voting', SET_SUMMARY.voting(s), SET_GROUPS.voting(sel, s, onoff))}
     ${host ? lobbySec('sound', 'Sound', liveCriers().length ? 'Controlled by Town Crier' : `${['ambient', 'event', 'narrator'].filter(k => soundPrefs[k]).length} of 3 on`, hostSoundHTML()) : ''}
     ${host ? lobbySec('test', 'Test mode', s.test.on ? 'On' : 'Off', `
       ${sel('test.on', onoff, 'Test mode', 'test.on')}
@@ -2905,24 +2895,7 @@ function gameSettingsHTML(){
   const onRoles = [s.wolves === 'auto' ? 'wolves: auto' : `${s.wolves} wol${+s.wolves === 1 ? 'f' : 'ves'}`,
     ...roleSummary(s, uids().length)].join(', ');
   return `<div class="card gset"><h3 style="margin:0 0 4px">Settings</h3><p class="note" style="margin-top:0">Changes apply from the next phase; a running clock isn't changed.</p>
-    <div class="gset-h">Timers</div>
-    ${sel('night', [[45,'45 s'],[60,'60 s'],[90,'90 s'],[120,'2 min']], 'Night length')}
-    ${sel('speak', [[15,'15 s'],[20,'20 s'],[30,'30 s'],[45,'45 s']], 'Speaking time')}
-    ${sel('discussion', [[120,'2 min'],[180,'3 min'],[300,'5 min'],[420,'7 min']], 'Open discussion time')}
-    ${sel('voteTime', [[30,'30 s'],[45,'45 s'],[60,'60 s'],[90,'90 s']], 'Voting time')}
-    <div class="gset-h">Day</div>
-    ${sel('dayMode', [['structured','Structured'],['open','Open']], 'Discussion')}
-    ${sel('rounds', [[1,'1'],[2,'2'],[3,'3'],[4,'4']], 'Accusation rounds')}
-    <div class="gset-h">Votes and the dead</div>
-    ${sel('votes', [['public','Public'],['anonymous','Anonymous']], 'Votes')}
-    ${sel('reveal', [['true','Reveal'],['false','Keep hidden']], 'Role of the eliminated')}
-    <p class="note" style="margin:2px 0 6px">Anyone already revealed stays revealed.</p>
-    <div class="gset-h">Vote information</div>
-    ${voteInfoSettingsHTML(sel, [['true','On'],['false','Off']], s)}
-    <div class="gset-h">Endgame</div>
-    ${sel('parity', [['smart','Smart'],['always','Always'],['never','Never']], 'End when wolves equal villagers')}
-    ${sel('parityTimer', [['short','Halved'],['normal','Normal'],['sudden','15 seconds']], 'Wolf timer at parity')}
-    ${s.fool ? sel('foolWin', [['continue','Game continues'],['end','Game ends']], 'When the Fool is hanged') : ''}
+    ${['global', 'night', 'day', 'voting'].map(k => `<div class="gset-h">${SET_TITLES[k]}</div>${SET_GROUPS[k](sel, s, [['true','On'],['false','Off']], true)}`).join('')}
     <p class="note">Locked for this game: the roles (${esc(onRoles)}) and the game size.</p>
     <div class="gset-h">Sound</div>${hostSoundHTML()}
     <div class="row"><button class="btn small" data-act="gset">Close</button></div></div>`;
@@ -2930,10 +2903,38 @@ function gameSettingsHTML(){
 // ---- Vote information (owner, 2026-10-08): memory aids built only from what was public: who voted for whom (Public
 // votes) and revealed roles. Buttons on players' phones during the day and the vote (not the Crier). Off by default;
 // the host can change them mid-game.
+// A switch whose requirement isn't met is shown greyed out and can't be changed, with a note saying where to fix it.
 function voteInfoSettingsHTML(sel, onoff, s){
-  return `${sel('viMe', onoff, 'See votes against you')}${sel('viInnocent', onoff, 'See who voted out innocents')}${sel('viWolf', onoff, 'See who didn’t vote for a wolf')}
-    <p class="note" style="margin:2px 0 6px">Players get buttons during the day and the vote. They work only with Public votes; the last two need roles revealed.${s.votes !== 'public' ? ' <b>Votes are anonymous now, so these are hidden.</b>' : ''}</p>`;
+  const pub = s.votes === 'public', rev = !!s.reveal;
+  const g = (html, ok) => ok ? html : `<div class="snd-off">${html.replace('<select', '<select disabled')}</div>`;
+  return `${g(sel('viMe', onoff, 'See votes against you'), pub)}${g(sel('viInnocent', onoff, 'See who voted out innocents'), pub && rev)}${g(sel('viWolf', onoff, 'See who didn’t vote for a wolf'), pub && rev)}
+    <p class="note" style="margin:2px 0 6px">Players get buttons on their phones during the day and the vote.${!pub ? ' <b>These need Votes: Public (above).</b>' : ''}${pub && !rev ? ' <b>The last two need Role of the eliminated: Reveal (in Global).</b>' : ''}</p>`;
 }
+// ---- Settings groups (owner, 2026-10-08): one layout for the lobby and the in-game Settings, so the host always
+// finds a setting in the same place. Global holds the rules for the whole game; Voting holds everything about votes.
+const SET_TITLES = { global:'Global', night:'Night', day:'Day', voting:'Voting' };
+const SET_GROUPS = {
+  global: (sel, s, onoff, inGame) => `${sel('reveal', [['true','Reveal'],['false','Keep hidden']], 'Role of the eliminated')}
+    <p class="note" style="margin:2px 0 6px">Whether the dead show their role, killed at night or hanged by day.${inGame ? ' Anyone already revealed stays revealed.' : ''}</p>
+    ${sel('parity', [['smart','Smart'],['always','Always'],['never','Never']], 'End when wolves equal villagers')}
+    ${roleCount(s, 'fool') ? sel('foolWin', [['continue','Game continues'],['end','Game ends']], 'When the Fool is hanged') : ''}`,
+  night: (sel, s) => `${sel('night', [[45,'45 s'],[60,'60 s'],[90,'90 s'],[120,'2 min']], 'Night length')}
+    ${sel('parityTimer', [['short','Halved'],['normal','Normal'],['sudden','15 seconds']], 'Wolf timer at parity')}`,
+  day: (sel, s) => `${sel('dayMode', [['structured','Structured'],['open','Open']], 'Discussion')}
+    ${sel('rounds', [[1,'1'],[2,'2'],[3,'3'],[4,'4']], 'Accusation rounds')}
+    ${sel('speak', [[15,'15 s'],[20,'20 s'],[30,'30 s'],[45,'45 s']], 'Speaking time')}
+    ${sel('discussion', [[120,'2 min'],[180,'3 min'],[300,'5 min'],[420,'7 min']], 'Open discussion time')}`,
+  voting: (sel, s, onoff) => `${sel('voteTime', [[30,'30 s'],[45,'45 s'],[60,'60 s'],[90,'90 s']], 'Voting time')}
+    ${sel('votes', [['public','Public'],['anonymous','Anonymous']], 'Votes')}
+    <div class="gset-sub">Vote information</div>${voteInfoSettingsHTML(sel, onoff, s)}`,
+};
+// One-line summaries for the lobby's closed sections.
+const SET_SUMMARY = {
+  global: s => `Roles ${s.reveal ? 'revealed' : 'hidden'}, parity: ${s.parity}${roleCount(s, 'fool') ? `, hanged Fool: ${s.foolWin === 'end' ? 'game ends' : 'game continues'}` : ''}`,
+  night: s => `${s.night} s, wolf timer at parity: ${{ short:'halved', normal:'normal', sudden:'15 s' }[s.parityTimer] || s.parityTimer}`,
+  day: s => s.dayMode === 'open' ? `Open, ${s.discussion / 60} min` : `Accusations, ${s.rounds} round${+s.rounds === 1 ? '' : 's'}, ${s.speak} s each`,
+  voting: s => { const n = [s.viMe, s.viInnocent, s.viWolf].filter(Boolean).length; return `${s.voteTime} s, ${s.votes === 'public' ? 'public' : 'anonymous'}${n ? `, vote information ${n} of 3 on` : ''}`; },
+};
 let viOpen = null;
 // Rounds whose votes were public (vote records before 2026-10-08 have no pub: then the current setting decides).
 function viVotes(){
