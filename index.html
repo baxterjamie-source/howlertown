@@ -234,8 +234,19 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
   font-family:var(--serif);font-size:clamp(20px,5vw,38px);color:#f3e6c8;background:rgba(10,12,20,.55);border:1px solid rgba(224,162,74,.45);border-radius:16px;
   padding:14px 22px;opacity:0;transition:opacity .5s;text-shadow:0 2px 6px #000}
 .hostnote.on{opacity:1}
+.rules{position:fixed;inset:0;z-index:8500;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(6,8,14,.55);
+  opacity:0;pointer-events:none;transition:opacity .8s}
+.rules.on{opacity:1}
+.rules-card{background:rgba(22,27,40,.94);border:1px solid #8a6a3a;border-radius:14px;padding:16px 20px;width:min(420px,100%);color:#f3e6c8;
+  font-size:clamp(14px,1.6vw,22px);line-height:1.5;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+body.crier .rules-card{width:min(720px,90vw)}
+.rules-t{font-family:var(--serif);font-size:1.45em;text-align:center;margin-bottom:6px}
+.rules-r span{color:#d9a35a}
+.rules-b{margin-top:8px;text-align:center;color:#c9b88f;font-size:.9em}
 .recap-ro{margin:4px 0 10px 14px;padding-left:12px;border-left:2px solid var(--line)}.recap-ro h4{margin:6px 0 4px;font-weight:600}
 .vi{margin:10px 0}.vi-list p{margin:4px 0}.vi-dead{color:#e0705f;text-decoration:line-through;text-decoration-thickness:1.5px}
+.bal-q{font:inherit;font-size:13px;width:20px;height:20px;line-height:18px;padding:0;margin-left:4px;border-radius:50%;border:1px solid #8a6a3a;background:transparent;color:#d9a35a;cursor:pointer;vertical-align:1px}
+.bal-big{font-size:18px}.tryit .see td,.tryit .see th{padding:3px 6px;font-size:13px}.tryit .see td+td,.tryit .see th+th{text-align:right}
 .bal{margin:12px 0 6px}.bal-l{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:14px;margin-bottom:4px}.bal-l b{font-family:var(--serif);font-weight:400;font-size:17px}
 .bal-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;border:1px solid var(--line)}.bal-bar i{display:block;height:100%}
 .bal-bar .bw{background:#b3352a}.bal-bar .bf{background:#c9a227}.bal-bar .bv{flex:1;background:#4a78a8}.bal .note{margin:4px 0 0}
@@ -396,6 +407,7 @@ body.howto-open{overflow:hidden}
 <div id="sndui"></div>
 <div id="intro" class="hidden" aria-hidden="true"></div>
 <div id="hostnote" class="hostnote" aria-live="polite"></div>
+<div id="rules" class="rules" aria-live="polite"></div>
 <div id="reveal" class="overlay hidden" data-act="dismiss-reveal"></div>
 <div id="finale" class="overlay finale hidden"></div>
 <div id="splash" class="hidden"><div class="sp-inner"><h1 class="sp-title">Howlertown</h1><p class="sp-tag">Evil lurks among the peaceful. But who…</p>
@@ -430,6 +442,7 @@ let MOCK = new URLSearchParams(location.search).has('mock');
 const SOUNDS = {
   // Ambient
   wind:        { cat:'ambient', label:'Wind',             files:['wind.mp3'] },
+  raven:       { cat:'ambient', label:'Raven',            files:['raven.mp3'], vol:.8 },          // two caws, 1.16 s
   howlFar:     { cat:'ambient', label:'Distant howl',     files:['howl-distant.mp3'], vol:.6 },
   murmur:      { cat:'ambient', label:'Crowd murmur',     files:['murmur.mp3'], vol:.07, loop:true },     // kept very low: people are talking over it
   bell:        { cat:'ambient', label:'Village bell',     files:['bell.mp3'] },
@@ -705,7 +718,7 @@ const partMs = p => p.t.split(/\s+/).length * 360 * (SPEECH.rate / (p.rate || SP
 const sayMs = text => speechParts(text).reduce((a, p) => a + partMs(p), 600);
 // Sound lengths in ms, measured from the files.
 const SND_LEN = { bell:2900, gavel:1200, trapdoor:6100, foolWin:2700, cardHowl:2800, rooster:2200, snarl:2400, cackle:3400, deathReveal:5100,
-  villageWin:8100, howlLoud:5200, noDeath:2600, newsNotify:2950, wolfAttack:10900, wind:12700, howlFar:6400 };
+  villageWin:8100, howlLoud:5200, noDeath:2600, newsNotify:2950, wolfAttack:10900, wind:12700, howlFar:6400, raven:1200 };
 // The news forge: the hammer winds up (lead), then strikes the anvil 4 times, in step with news-notify.mp3
 // (strike times measured from the file, ms after it starts). Tuned in tools/preview/forge.html.
 const FORGE = { lead:600, hits:[0, 740, 1430, 2160], ms:3300 };
@@ -1143,12 +1156,24 @@ function balanceOf(n, s){
   const shift = wo * TALK_NUDGE; wo -= shift; vi += shift;
   const t = wo + vi + fo || 1; return { wolves: wo / t, village: vi / t, fool: fo / t };
 }
+// The "?" beside the bar (owner, 2026-10-09): mainly the headline number of simulated games, then the details.
+function balanceInfo(){
+  const m = BALANCE.m || { runs: [] }, total = m.runs.reduce((a, [, s, g]) => a + s * g, 0), fmt = x => x.toLocaleString('en');
+  const date = m.made ? new Date(m.made + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' }) : '';
+  $('tryit').innerHTML = `<div class="card"><h2 style="margin-top:0">Balance meter</h2>
+    <p class="bal-big">Based on <b>${fmt(total)}</b> game simulations.</p>
+    <table class="see"><tr><th style="text-align:left">Runs</th><th>Setups</th><th>Games each</th><th>Games</th></tr>
+      ${m.runs.map(([l, s, g]) => `<tr><td>${esc(l)}</td><td>${fmt(s)}</td><td>${g}</td><td>${fmt(s * g)}</td></tr>`).join('')}</table>
+    <p class="note">${date ? `Bot games played on ${date}. ` : ''}Bots can’t talk, bluff or read faces, so the meter is nudged towards the village to allow for table talk. As real games are played, it will lean more on them.</p>
+    <div class="row"><button class="btn" data-act="try-back">Close</button></div></div>`;
+  $('tryit').classList.remove('hidden');
+}
 function balanceHTML(n, s){
   const b = balanceOf(n, s); if(!b) return '';
   const pct = x => Math.round(x * 100), d = b.wolves - b.village, fool = b.fool >= .01;
   const word = Math.abs(d) < .1 ? 'Fair' : d > 0 ? (d > .3 ? 'Wolves strongly favoured' : 'Wolves favoured') : (d < -.3 ? 'Village strongly favoured' : 'Village favoured');
   return `<div class="bal" title="From test runs with bots, adjusted for table talk">
-    <div class="bal-l"><span class="wolfc">Wolves ${pct(b.wolves)}%</span><b>${word}</b><span>Village ${pct(b.village)}%</span></div>
+    <div class="bal-l"><span class="wolfc">Wolves ${pct(b.wolves)}%</span><b>${word} <button class="bal-q" data-act="bal-info" aria-label="About the balance meter">?</button></b><span>Village ${pct(b.village)}%</span></div>
     <div class="bal-bar"><i class="bw" style="width:${pct(b.wolves)}%"></i>${fool ? `<i class="bf" style="width:${pct(b.fool)}%"></i>` : ''}<i class="bv"></i></div>
     <p class="note">${n < MIN_PLAYERS ? `Shown for ${MIN_PLAYERS} players. ` : ''}${fool ? `The Town Fool wins ${pct(b.fool)}% of games. ` : ''}Estimated from bot test runs, allowing for table talk.</p></div>`;
 }
@@ -1259,11 +1284,12 @@ async function startGame(){
   }
   await DB.set(`${gp()}/private/night`, { n: 0 });
   await DB.set(`${gp()}/live/filler`, {});
-  // Roles are already dealt in secret; the deck is the show. The cards appear 2 s after Start,
-  // and Night 1 begins when the host presses Start the game once every card is drawn.
-  const t = now();
+  // Roles are already dealt in secret; the deck is the show. First every screen shows this game's rules for 10 s
+  // (rulesUntil, owner 2026-10-09), then the cards appear, and Night 1 begins when the host presses Start the game
+  // once every card is drawn.
+  const t = now(), rulesUntil = t + RULES_MS, showAt = rulesUntil + 1000;
   const up = { status:'playing', revealed:{}, revealedArt:{}, alter, hanged:{}, lastNight:null, result:null, foolWon:null, startedAt: t, gameNo: (game.gameNo || 0) + 1,
-    phase: { name:'deal', n:0, startedAt:t, showAt: t + 2000, cards: list.length, picks:{}, say: mkSay([{ at: t + 2500, t: draw('deal') }]) } };
+    phase: { name:'deal', n:0, startedAt:t, rulesUntil, showAt, cards: list.length, picks:{}, say: mkSay([{ at: showAt + 500, t: draw('deal') }]) } };
   for(const u of list) up[`players.${u}.alive`] = true;
   await upd(up);
   secrets = {}; for(const u of list) secrets[u] = { role: deal[u], art: art[u], potions: deal[u] === 'witch' ? { save:true, kill:true } : null };
@@ -2248,7 +2274,7 @@ function fxInit(){
     <g id="fx-flag"><g class="fx-flagwave" clip-path="url(#fx-flagclip)"><use href="#imN"/><use href="#imA"/><use href="#imD"/></g></g>
     <g id="fx-sun" style="opacity:0;transition:opacity 3s ease"><g transform="translate(${FX.sun.x} ${FX.sun.y})"><g id="fx-sun-in">
       <circle r="90" fill="url(#fx-sunhalo)"/><circle r="17" fill="url(#fx-sunface)"/></g></g></g>
-    <g id="fx-leaves"></g><g id="fx">
+    <g id="fx-leaves"></g><g id="fx-ravens"></g><g id="fx">
       <g id="fx-windows">${WIN_GROUPS.map(({ panes, box: [x, y, w, h] }, i) => `<g id="fx-w${i}">${panes.map(([px, py, pw, ph]) => `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" fill="#120d0b" opacity=".86"/>`).join('')}` +
         `<g class="fx-lit" opacity="0"><ellipse cx="${x + w / 2}" cy="${y + h / 2}" rx="${w * 1.6 + 4}" ry="${h * 1.1 + 4}" fill="url(#fx-wglow)"/>${panes.map(([px, py, pw, ph]) => `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" fill="#ffb84f"/>`).join('')}</g></g>`).join('')}</g>
       <g id="fx-eyes"></g>
@@ -2263,6 +2289,153 @@ function fxInit(){
     </g>`);
   fxSchedule(); fxSmoke(); fxWindowsLoop(); setTimeout(fxEyesLoop, 8000);
 }
+// ---- Ravens (owner, 2026-10-09; tuned in tools/preview/raven.html) ---------------------------------------------------
+// Up to 5 ravens perch on 10 roosts (9 inner-ring roof peaks and the well), one per roost. Usually 1–2; during the vote
+// they gather on the well and 4 of RAVEN_VOTE, waiting for a death. The sound device decides every arrival, departure
+// and caw, with all the random flight details, and publishes them in game.ravens / game.ravenCaw, so every screen
+// shows the same birds at the same moments; the caw (raven.mp3) plays on the sound device as the beak opens everywhere.
+// Perched head turns and wing shrugs are each screen's own (small, and not worth syncing).
+const RAVEN_ROOSTS = [[262, 293], [338, 282], [421, 303], [542, 353], [571, 320], [645, 403], [743, 317], [832, 275], [947, 299], [1030, 228]]
+  .map(([x, y]) => [x, y, Math.round((10 + (y - 228) * .035) * 1.25)]);   // raven height by distance (painting units)
+const RAVEN_WELL = 5, RAVEN_VOTE = [0, 2, 3, 6, 7, 8], RAVEN_MAX = 5, RAVEN_CAW_MS = 1160;
+const RV = { INK:'#0b0c10', BODY:'#15171e', SHEEN:'#2e3a52', RIM:'#4a5670' };
+function ravenPerchedSVG(night){
+  const rim = night ? `stroke="${RV.RIM}" stroke-width="1.6"` : `stroke="#000" stroke-width="1"`, { INK, BODY, SHEEN } = RV;
+  return `<g class="rv-tail"><path d="M-14,-36 L-60,-17 L-74,-7 L-64,-2 L-8,-24Z" fill="${INK}" ${rim}/><path d="M-20,-30 L-66,-6" stroke="${SHEEN}" stroke-width="1.4" opacity=".5"/></g>
+  <g stroke="${INK}" stroke-width="3.4" stroke-linecap="round"><path d="M0,-19 L-2,0 M-8,0 L5,0 M-2,0 L-6,-2"/><path d="M8,-19 L9,0 M4,0 L16,0"/></g>
+  <g class="rv-body"><path d="M22,-76 C35,-70 37,-52 27,-38 C19,-27 5,-20 -8,-21 C-18,-23 -24,-30 -22,-38 C-18,-54 2,-74 22,-76Z" fill="${BODY}" ${rim}/>
+    <path d="M-6,-23 C-2,-14 10,-14 13,-24" fill="${BODY}" ${rim}/><path d="M27,-66 C33,-58 32,-48 26,-40" fill="none" stroke="${SHEEN}" stroke-width="2.6" stroke-linecap="round" opacity=".7"/></g>
+  <g class="rv-wing"><path d="M18,-72 C30,-64 30,-48 18,-40 C2,-33 -30,-22 -57,-11 C-38,-27 -20,-49 0,-66 C6,-71 12,-73 18,-72Z" fill="${INK}" ${rim}/>
+    <path d="M14,-60 C10,-50 2,-42 -10,-36 M2,-58 C-4,-48 -14,-38 -28,-30" fill="none" stroke="${SHEEN}" stroke-width="1.5" opacity=".55"/></g>
+  <g class="rv-head"><path class="rv-hackle" d="M28,-75 L41,-73 L37,-70 L42,-67 L35,-65 L38,-61 L29,-62 L22,-68Z" fill="${INK}" ${rim}/>
+    <path d="M18,-73 C18,-83 27,-89 38,-89 C46,-89 50,-87 52,-84 L48,-76 C40,-72 30,-70 21,-69Z" fill="${BODY}" ${rim}/>
+    <g class="rv-jaw"><path d="M49,-80 C56,-80 64,-80 70,-79.5 C62,-76.5 54,-75.5 48,-76Z" fill="${INK}" ${rim}/></g>
+    <path d="M49,-87 C58,-88.5 67,-85.5 73,-79.5 C65,-80.5 57,-80.5 48,-80Z" fill="${INK}" ${rim}/>
+    <path d="M49,-87 C53,-87.5 57,-86.5 59,-84.5" fill="none" stroke="#2a2f3c" stroke-width="2.2" stroke-linecap="round"/>
+    <circle cx="41" cy="-83.5" r="1.9" fill="#000"/><circle cx="41.6" cy="-84.1" r=".6" fill="#9aa6bd"/></g>`;
+}
+// Long, broad wings with five "fingered" primaries; a: −1 (fully down) … +1 (fully up), redrawn every frame.
+function ravenWing(a){
+  const L = 80 * a, sw = 6 + 12 * (1 - Math.abs(a)), pts = [[12, -1], [6, -L * .42], [-sw, -L * .86]];
+  for(let k = 0; k < 5; k++) pts.push([-sw - 3 - k * 5, -L * (1 - k * .055)], [-sw - 2 - k * 5, -L * (.86 - k * .055)]);
+  pts.push([-32, -L * .55], [-24, 4]);
+  return 'M' + pts.map(p => p.map(v => v.toFixed(1)).join(',')).join(' L') + 'Z';
+}
+function ravenFlyerSVG(night){
+  const rim = night ? `stroke="${RV.RIM}" stroke-width="1.6"` : `stroke="#000" stroke-width="1"`, { INK, BODY } = RV;
+  return `<path class="fl-far" d="${ravenWing(.5)}" fill="#07080b" transform="translate(-2,-2)"/>
+  <path d="M-24,-9 L-56,-12 L-66,-1 L-56,10 L-22,6Z" fill="${INK}" ${rim}/>
+  <path d="M-28,-6 C-10,-16 18,-16 30,-8 C34,-6 36,-2 34,2 C18,10 -8,10 -28,4Z" fill="${BODY}" ${rim}/>
+  <path d="M28,-10 C40,-12 48,-8 50,-4 L36,1 C34,-4 32,-7 28,-10Z" fill="${BODY}" ${rim}/>
+  <path d="M46,-8 C54,-8 60,-5 64,-2 C58,-1 52,-1 46,-1Z" fill="${INK}" ${rim}/><circle cx="42" cy="-6" r="1.8" fill="#000"/>
+  <path class="fl-legs" opacity="0" d="M-6,6 L-2,22 M4,6 L8,22 M-7,23.5 L4,20.5 M3,23.5 L14,20.5" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+  <path class="fl-near" d="${ravenWing(.5)}" fill="${INK}" ${rim}/>`;
+}
+// Perched moves: head turns and tilts (owner's picks), wing shrug and ruffle, and the caw timed to raven.mp3
+// (caws at 0.08–0.40 s and 0.68–0.86 s: beak open, head thrust, hackles puffed, tail flick).
+function ravenMoves(g){
+  const q = c => g.querySelector(c), head = q('.rv-head'), jaw = q('.rv-jaw'), wing = q('.rv-wing'), body = q('.rv-body'), tail = q('.rv-tail'), hack = q('.rv-hackle');
+  for(const [n, o] of [[head, '24px -72px'], [jaw, '49px -80px'], [wing, '12px -66px'], [body, '0 -40px'], [tail, '-12px -32px'], [hack, '28px -67px']]){ n.style.transformBox = 'view-box'; n.style.transformOrigin = o; }
+  const A = (n, kf, ms, e = 'ease-in-out') => n.animate(kf, { duration: ms, easing: e });
+  return {
+    look: () => A(head, [{ transform:'none' }, { transform:'scaleX(.55) rotate(-4deg)', offset:.25 }, { transform:'scaleX(.55) rotate(-4deg)', offset:.6 }, { transform:'none' }], 1600),
+    tilt: () => A(head, [{ transform:'none' }, { transform:'rotate(22deg)', offset:.2 }, { transform:'rotate(26deg)', offset:.5 }, { transform:'rotate(18deg)', offset:.7 }, { transform:'none' }], 2000),
+    peer: () => A(head, [{ transform:'none' }, { transform:'translate(2px,1px) rotate(-10deg)', offset:.3 }, { transform:'translate(2px,1px) rotate(-10deg)', offset:.7 }, { transform:'none' }], 1300),
+    shrug: () => { A(wing, [{ transform:'none' }, { transform:'translate(-2px,-6px) rotate(-14deg)', offset:.3 }, { transform:'translate(-1px,-3px) rotate(-6deg)', offset:.55 }, { transform:'none' }], 900, 'ease-out');
+      A(body, [{ transform:'none' }, { transform:'scale(1.08,1.05)', offset:.35 }, { transform:'scale(1.02)', offset:.7 }, { transform:'none' }], 1100); },
+    caw: () => { const K = (o, c) => [{ transform:'none', offset:0 }, { transform:o, offset:.07 }, { transform:o, offset:.3 }, { transform:c, offset:.4 }, { transform:c, offset:.56 },
+        { transform:o, offset:.6 }, { transform:o, offset:.71 }, { transform:'none', offset:.8 }, { transform:'none', offset:1 }];
+      A(jaw, K('rotate(26deg)', 'rotate(3deg)'), RAVEN_CAW_MS, 'linear'); A(head, K('translate(4px,2px) rotate(-8deg)', 'translate(1px,0)'), RAVEN_CAW_MS, 'ease-out');
+      A(hack, K('scale(1.25)', 'scale(1.08)'), RAVEN_CAW_MS, 'linear'); A(tail, K('rotate(-10deg)', 'none'), RAVEN_CAW_MS, 'linear'); },
+  };
+}
+// The flight pose at u (0…1) along a published path: a quadratic curve, deep unhurried flaps (about 3 a second) with a
+// glide, and, when landing, a flare at the end: wings high, body pitched up, legs and feet out.
+function ravenPose(f, p, u, landing){
+  const e = landing ? 1 - (1 - u) ** 2 : u * u * .4 + u * .6, [p0, p1, p2] = p;
+  const q = k => (1 - e) ** 2 * p0[k] + 2 * (1 - e) * e * p1[k] + e * e * p2[k];
+  const dx = 2 * (1 - e) * (p1[0] - p0[0]) + 2 * e * (p2[0] - p1[0]), dy = 2 * (1 - e) * (p1[1] - p0[1]) + 2 * e * (p2[1] - p1[1]);
+  let pitch = Math.atan2(dy, Math.abs(dx)) * 180 / Math.PI * .6, a; const flap = Math.sin(now() / 1000 * Math.PI * 2 * 3.1);
+  if(landing && u > .82){ const k = (u - .82) / .18; a = .55 + .5 * k + flap * .25 * (1 - k); pitch = -25 * k; f.legs.setAttribute('opacity', k.toFixed(2)); }
+  else if(Math.abs(u - .45) < .12) a = .15 + flap * .08;
+  else { a = flap * .95; f.legs.setAttribute('opacity', 0); }
+  f.near.setAttribute('d', ravenWing(a)); f.far.setAttribute('d', ravenWing(a * .85));
+  const dir = dx >= 0 ? 1 : -1, s = f.s * (landing ? .55 + .45 * e : 1 - .3 * e);
+  f.g.setAttribute('transform', `translate(${q(0).toFixed(1)},${q(1).toFixed(1)}) scale(${(s * dir).toFixed(3)},${s.toFixed(3)}) rotate(${(pitch * dir).toFixed(1)})`);
+}
+// ---- Every screen: draw the published ravens. --------------------------------------------------------------------
+const ravenLocal = {};                                   // roost → { key, perch, m, fly, landed, turned, idle }
+let ravenLoopOn = false, ravenCawSeen = 0;
+function ravenFrame(){
+  const layer = $('fx-ravens'), st = game?.status === 'playing' ? (game.ravens || {}) : {}, t = now();
+  if(!layer){ ravenLoopOn = false; return; }
+  const night = game?.phase?.name === 'night';
+  for(const k of Object.keys(ravenLocal)) if(!st[k] || st[k].id !== ravenLocal[k].key){ ravenLocal[k].perch?.remove(); ravenLocal[k].fly?.g.remove(); clearTimeout(ravenLocal[k].idle); delete ravenLocal[k]; }
+  for(const [k, r] of Object.entries(st)){
+    if(!r) continue; const [x, y, h] = RAVEN_ROOSTS[k] || [], s = h / 100;
+    if(x === undefined) continue;
+    let L = ravenLocal[k];
+    if(!L){
+      L = ravenLocal[k] = { key: r.id };
+      layer.insertAdjacentHTML('beforeend', `<g class="rv-perch" transform="translate(${x},${y}) scale(${s},${s})" style="display:none"><g class="rv-turn" style="transform:scaleX(${r.dir})">${ravenPerchedSVG(night)}</g></g>`);
+      L.perch = layer.lastElementChild; L.m = ravenMoves(L.perch);
+      layer.insertAdjacentHTML('beforeend', `<g class="rv-fly" style="display:none">${ravenFlyerSVG(night)}</g>`);
+      const g = layer.lastElementChild; L.fly = { g, s, near: g.querySelector('.fl-near'), far: g.querySelector('.fl-far'), legs: g.querySelector('.fl-legs') };
+    }
+    const landAt = r.a + r.d, out = r.l, flying = t >= r.a && t < landAt, perched = t >= landAt && (!out || t < out), leaving = out && t >= out && t < out + r.ld;
+    L.fly.g.style.display = flying || leaving ? '' : 'none'; L.perch.style.display = perched ? '' : 'none';
+    if(flying) ravenPose(L.fly, r.pin, (t - r.a) / r.d, true);
+    if(leaving) ravenPose(L.fly, r.pout, (t - out) / r.ld, false);
+    if(perched && !L.landed){ L.landed = true;
+      // Landed facing the way it flew; turned to face into the square a moment later.
+      if(r.dir !== r.face) setTimeout(() => L.perch.isConnected && L.perch.querySelector('.rv-turn').animate([{ transform:`scaleX(${r.dir})` }, { transform:'scaleX(.15)', offset:.5 }, { transform:`scaleX(${r.face})` }], { duration: 380, fill:'forwards' }), 900);
+      const idle = () => { if(!L.perch.isConnected) return; if(document.visibilityState === 'visible') L.m[rnd(['look', 'tilt', 'peer', 'look', 'shrug', 'tilt'])](); L.idle = setTimeout(idle, 2200 + Math.random() * 2800); };
+      L.idle = setTimeout(idle, 1500); }
+  }
+  // A published caw: the beak opens on every screen; the sound device plays raven.mp3 at the same moment.
+  const c = game?.ravenCaw;
+  if(c && c.at !== ravenCawSeen && t >= c.at){ ravenCawSeen = c.at;
+    if(t - c.at < 1500 && ravenLocal[c.r]?.landed){ ravenLocal[c.r].m.caw(); if(isSoundDevice()) playSound('raven', { random:true }); } }
+  if(Object.values(st).some(Boolean) || Object.keys(ravenLocal).length) requestAnimationFrame(ravenFrame); else ravenLoopOn = false;
+}
+setInterval(() => { if(!ravenLoopOn && $('fx-ravens') && (Object.values(game?.ravens || {}).some(Boolean) || Object.keys(ravenLocal).length)){ ravenLoopOn = true; requestAnimationFrame(ravenFrame); } }, 500);
+// ---- The sound device: decide arrivals, departures and caws, and publish them. ------------------------------------
+let ravenNextIn = 0, ravenNextCaw = 0;
+setInterval(() => {
+  const ph = game?.phase, t = now();
+  if(!game || !isSoundDevice() || game.status !== 'playing') return;
+  const st = game.ravens || {}, live = Object.entries(st).filter(([, r]) => r && !r.l).map(([k]) => +k), up = {}, R = (a, b) => a + Math.random() * (b - a);
+  // Finished departures are cleared.
+  for(const [k, r] of Object.entries(st)) if(r && r.l && t > r.l + r.ld + 500) up[`ravens.${k}`] = null;
+  const vote = ph?.name === 'vote', pausedOrIntro = ph?.pausedAt || introRunning(ph);
+  const leave = k => { const r = st[k], [x, y, h] = RAVEN_ROOSTS[k], face = r.face, ex = face > 0 ? R(1120, 1360) : R(-80, 160);
+    up[`ravens.${k}`] = { ...r, l: t, ld: Math.round(R(2400, 3200)), pout: [[x, y - h * .3], [x + face * R(60, 140), y - R(60, 120)], [ex, R(-60, 40)]] }; };
+  const arrive = k => { const [x, y, h] = RAVEN_ROOSTS[k], face = x < 640 ? 1 : -1, sx = x < 640 ? R(1080, 1340) : R(-60, 200), sy = R(-40, 60), dir = x > sx ? 1 : -1;
+    up[`ravens.${k}`] = { id: Math.random().toString(36).slice(2, 8), a: t + 300, d: Math.round(R(3200, 4200)), face, dir, l: null,
+      pin: [[sx, sy], [(sx + x) / 2 + R(-80, 80), Math.min(sy, y) - R(20, 70)], [x - dir * 6, y - h * .3]], stay: vote ? null : Math.round(R(15000, 30000)) }; };
+  if(!pausedOrIntro){
+    if(vote){
+      // The vote: off the other roofs; the well first, then vote roofs, a little apart, up to 5.
+      for(const k of live) if(k !== RAVEN_WELL && !RAVEN_VOTE.includes(k)) leave(k);
+      const held = live.filter(k => k === RAVEN_WELL || RAVEN_VOTE.includes(k));
+      if(held.length < RAVEN_MAX && t > ravenNextIn){ const free = [RAVEN_WELL, ...shuffle([...RAVEN_VOTE])].filter(k => !held.includes(k) && !st[k]);
+        if(free.length){ arrive(free[0]); ravenNextIn = t + R(900, 2200); } }
+    } else {
+      // Otherwise 1–2 come and go: each stays 15–30 s. The vote's ravens stay to watch the hanging, then drift off.
+      for(const k of live){ const r = st[k]; if((r.stay && t > r.a + r.d + r.stay) || (!r.stay && ph?.name !== 'verdict' && Math.random() < .15)) leave(k); }
+      const n = live.filter(k => !up[`ravens.${k}`]).length;
+      if(n < 2 && t > ravenNextIn){ const free = RAVEN_ROOSTS.map((_, i) => i).filter(i => !st[i]);
+        if(free.length && (n === 0 || Math.random() < .35)){ arrive(rnd(free)); ravenNextIn = t + R(12000, 35000); } else ravenNextIn = t + R(5000, 12000); }
+    }
+    // Caws: rationed. More ravens, a few more caws, never a chorus; never over speech or another sound.
+    const perched = live.filter(k => t > st[k].a + st[k].d + 1500);
+    if(perched.length && t > ravenNextCaw && !speaking && t >= busyUntil && !randomNow.size){
+      up.ravenCaw = { r: rnd(perched), at: t + 400 };
+      ravenNextCaw = t + R(14000, 26000) / Math.sqrt(perched.length);
+    } else if(!ravenNextCaw) ravenNextCaw = t + R(6000, 12000);
+  }
+  if(Object.keys(up).length) DB.update(gp(), up).catch(() => {});
+}, 1000);
 // The moon rises over the forest road as each night begins (once the nightfall animation has finished).
 let moonKey = null;
 function fxMoon(){
@@ -2975,6 +3148,39 @@ function hostSoundHTML(){
     <label class="f">Volume<input type="range" min="0" max="1" step="0.05" value="${soundPrefs.volume}" data-snd="volume" style="max-width:55%" ${dis}></label>
     ${off ? '' : '<div class="row"><button class="btn small" data-act="snd-test">Test sound</button></div>'}</div>`;
 }
+// ---- The rules overlay (owner, 2026-10-09): when the host presses Start, every screen (phones and the Crier) shows
+// this game's settings in a compact list for RULES_MS, then it fades and the card deal begins. Built from the public
+// settings only, so it gives nothing away.
+const RULES_MS = 10000;
+function rulesHTML(){
+  const s = settingsOf(game), list = uids(), n = list.length, bots = list.filter(u => players()[u]?.bot).length;
+  const roles = roleSummary(s, n), w = startWolves(), b = balanceOf(n, s);
+  const vi = [s.viMe && 'votes against you', s.viInnocent && s.reveal && 'who voted out innocents', s.viWolf && s.reveal && 'who didn’t vote for a wolf'].filter(Boolean);
+  const parity = { smart:'wolves win at even numbers, unless a Witch still has poison', always:'wolves win at even numbers', never:'wolves must outlast everyone' }[s.parity] || s.parity;
+  const rows = [
+    ['Players', `${n}${bots ? ` (${bots} bot${bots === 1 ? '' : 's'})` : ''}`],
+    ['Wolves', String(w)],
+    ['Roles', roles.length ? roles.join(', ') : 'Villagers only'],
+    ['Roles of the dead', s.reveal ? 'revealed' : 'kept hidden'],
+    ['Night', `${dur(s).night} s`],
+    ['Day', s.dayMode === 'open' ? `open discussion, ${Math.round(dur(s).discussion / 60)} min` : `${s.rounds} accusation round${+s.rounds === 1 ? '' : 's'}, ${dur(s).speak} s to speak`],
+    ['Votes', `${s.votes === 'public' ? 'public' : 'anonymous'}, ${dur(s).voteTime} s`],
+    ...(vi.length && s.votes === 'public' ? [['Vote information', vi.join(', ')]] : []),
+    ['Endgame', parity],
+    ...(roleCount(s, 'fool', n) ? [['Hanged Fool', s.foolWin === 'end' ? 'ends the game' : 'the game carries on']] : []),
+  ];
+  const word = !b ? '' : Math.abs(b.wolves - b.village) < .1 ? 'Fair' : b.wolves > b.village ? 'Wolves favoured' : 'Village favoured';
+  return `<div class="rules-card"><div class="rules-t">Tonight’s rules</div>${rows.map(([k, v]) => `<div class="rules-r"><span>${k}</span> ${esc(v)}</div>`).join('')}` +
+    (word ? `<div class="rules-b">Balance: ${word}</div>` : '') + `</div>`;
+}
+let rulesFor = null;
+setInterval(() => {
+  const el = $('rules'); if(!el) return;
+  const ph = game?.status === 'playing' ? game.phase : null, on = ph?.name === 'deal' && ph.rulesUntil && now() < ph.rulesUntil;
+  const key = on ? `${code}|${game.gameNo}` : null;
+  if(on && rulesFor !== key){ el.innerHTML = rulesHTML(); rulesFor = key; }
+  el.classList.toggle('on', !!on);
+}, 250);
 // On every screen, the host's too: "Game paused by host (Jamie)" stays up while paused; "Jamie skipped ahead"
 // shows for 3 s. The text stays put while it fades out.
 setInterval(() => {
@@ -3403,6 +3609,7 @@ document.addEventListener('click', async e => {
       case 'tryit': return openTry();
       case 'try-back': return closeTry();
       case 'try-go': return tryItNow();
+      case 'bal-info': return balanceInfo();
       case 'joincode': return joinGame($('in-code').value);
       case 'crier-join': return joinAsCrier($('in-crier-code').value);
       case 'splash': return showSplash();
