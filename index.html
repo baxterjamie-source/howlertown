@@ -234,6 +234,7 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
   padding:14px 22px;opacity:0;transition:opacity .5s;text-shadow:0 2px 6px #000}
 .hostnote.on{opacity:1}
 .recap-ro{margin:4px 0 10px 14px;padding-left:12px;border-left:2px solid var(--line)}.recap-ro h4{margin:6px 0 4px;font-weight:600}
+.vi{margin:10px 0}.vi-list p{margin:4px 0}
 .bal{margin:12px 0 6px}.bal-l{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:14px;margin-bottom:4px}.bal-l b{font-family:var(--serif);font-weight:400;font-size:17px}
 .bal-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;border:1px solid var(--line)}.bal-bar i{display:block;height:100%}
 .bal-bar .bw{background:#b3352a}.bal-bar .bf{background:#c9a227}.bal-bar .bv{flex:1;background:#4a78a8}.bal .note{margin:4px 0 0}
@@ -634,8 +635,8 @@ const VOICE = {
     'I know what I am. And {accused} still voted to hang me.'],
   b_accusedMe: ['{accused} accused me, and I am no wolf. That says more about {accused} than about me.', '{accused} came after me. An innocent person would not.',
     'I know I’m innocent. So {accused} accusing me was no mistake.'],
-  b_seer: ['I am the Seer. I looked at {accused} in the night. {accused} is a wolf.', 'I have kept quiet long enough. I am the Seer, and {accused} is a wolf.',
-    'Hang {accused}. I am the Seer, and I saw the wolf in them.'],
+  b_seer: ['I am a Seer. I looked at {accused} in the night. {accused} is a wolf.', 'I have kept quiet long enough. I am a Seer, and {accused} is a wolf.',
+    'Hang {accused}. I am a Seer, and I saw the wolf in them.'],
   // Wolves, whose real reason is something only a wolf could know: vague, personal, deniable.
   b_cagey: ['I accuse {accused} because I don’t like the way {accused} looks at me.', 'Something about {accused} has felt wrong since the first night.',
     '{accused} is too calm. Far too calm, for a village full of wolves.', 'I can’t say why. But I would sleep better with {accused} on the rope.',
@@ -648,8 +649,8 @@ const VOICE = {
   d_votedInnocent: ['{accuser} voted to hang {x}, who was innocent. Now {accuser} wants me. See a pattern?', '{accuser} helped hang {x}, an innocent. Am I next on the list?'],
   d_suspect: ['I would look hard at {accuser} instead. Who gains if I hang?', 'Wolves accuse to save their own skin. Ask yourselves about {accuser}.',
     'Watch {accuser}. The loudest finger often hides the claws.'],
-  d_seer: ['Of course {accuser} wants me gone. I am the Seer, and {accuser} is a wolf.', 'I am the Seer, and I have seen {accuser} in the night. A wolf, accusing the Seer.'],
-  d_seerClaim: ['Hang me and you hang your Seer. The wolf is {x}, not me.', 'I am the Seer. I have seen {x} for what they are. Hang {x}, not me.'],
+  d_seer: ['Of course {accuser} wants me gone. I am a Seer, and {accuser} is a wolf.', 'I am a Seer, and I have seen {accuser} in the night. A wolf, accusing a Seer.'],
+  d_seerClaim: ['Hang me and you hang a Seer. The wolf is {x}, not me.', 'I am a Seer. I have seen {x} for what they are. Hang {x}, not me.'],
   d_plain: ['I am no wolf. You are wasting the day on me.', 'I have done nothing but hunt the wolves. Hang me and they win.', 'Look at my votes. I have nothing to hide.',
     'You have the wrong neighbour. The wolves are laughing.'],
   d_fool: ['Hang me if you like. I have nothing more to say.', 'Do what you must. I won’t beg.', 'Perhaps I am a wolf. Perhaps not. Decide.'],
@@ -681,7 +682,7 @@ function pubWolves(justRevealed = {}){
   if(s.reveal) for(const r of Object.values({ ...(game.revealed || {}), ...justRevealed })) if(r === 'werewolf') w--;
   return Math.max(1, w);
 }
-const roleSentence = (u, r) => `${nameOf(u)} was ${r === 'werewolf' ? 'a Werewolf' : r === 'villager' ? 'a Villager' : 'the ' + roleName(r)}.`;
+const roleSentence = (u, r) => `${nameOf(u)} was ${r === 'werewolf' ? 'a Werewolf' : r === 'villager' ? 'a Villager' : 'a ' + roleName(r)}.`;
 // Splits a line into spoken pieces: sentences and "…" pauses, and ~very slow~ / _slow_ words.
 function speechParts(text){
   const out = [];
@@ -1047,6 +1048,7 @@ const DEFAULTS = {
   seats:'any', wolves:'auto', seer:true, witch:true, doctor:false, fool:false, witchBoth:true,
   dayMode:'structured', rounds:2, speak:20, discussion:180, night:60, voteTime:45,
   votes:'public', reveal:true, parity:'smart', parityTimer:'short', foolWin:'continue',
+  viMe:false, viInnocent:false, viWolf:false,                 // Vote information (memory aids from public votes)
   test:{ on:false, fast:false, allSeeing:false, forceRole:'' },
 };
 const MIN_PLAYERS = 5, MAX_PLAYERS = 16;
@@ -1503,7 +1505,8 @@ async function stepVote(ph, t){
   const max = Math.max(0, ...Object.values(tally));
   const top = max > 0 ? Object.keys(tally).filter(c => tally[c] === max) : [];
   const eliminated = top.length === 1 ? top[0] : null;
-  await logHistory(`n${String(ph.n).padStart(2,'0')}b${ph.round}`, { type:'vote', n: ph.n, round: ph.round, votes: ph.votes || {}, tally,
+  // pub: whether who-voted-for-whom was shown (Public votes), so later memory aids and bots never use a secret vote.
+  await logHistory(`n${String(ph.n).padStart(2,'0')}b${ph.round}`, { type:'vote', n: ph.n, round: ph.round, votes: ph.votes || {}, tally, pub: s.votes === 'public',
     eliminated: (top.length > 1 && ph.round === 1) ? null : eliminated, runoff: top.length > 1 && ph.round === 1 ? top : null });
   if(top.length > 1 && ph.round === 1) return startVote(ph.n, 2, top, { tally, votes: s.votes === 'public' ? (ph.votes || {}) : null });
   const reason = eliminated ? 'elected' : (top.length > 1 ? 'tie' : 'none');
@@ -1637,7 +1640,7 @@ function hipbFacts(){
     acc: Object.values(game.acc || {}).filter(a => a.g === g).sort((x, y) => x.n - y.n || x.r - y.r) };
 }
 // The votes of one round that bot b can see: all of them if votes are public, otherwise just b's own.
-const hipbVotes = (F, e, b) => F.s.votes === 'public' ? (e.votes || {}) : (b && e.votes?.[b] ? { [b]: e.votes[b] } : {});
+const hipbVotes = (F, e, b) => (e.pub ?? F.s.votes === 'public') ? (e.votes || {}) : (b && e.votes?.[b] ? { [b]: e.votes[b] } : {});
 // Evidence about player u, as bot b sees it (b = null: what any villager could see).
 function hipbEvidence(F, b, u){
   const ev = [], R = F.rev, N = nameOf, add = (k, w, txt, x) => ev.push({ k, w, txt, x });
@@ -2409,6 +2412,7 @@ function renderLobby(){
       ${sel('voteTime', [[30,'30 s'],[45,'45 s'],[60,'60 s'],[90,'90 s']], 'Voting time')}
       ${sel('votes', [['public','Public'],['anonymous','Anonymous']], 'Votes')}
       ${sel('reveal', [['true','Reveal'],['false','Keep hidden']], 'Role of the eliminated')}`)}
+    ${lobbySec('voteinfo', 'Vote information', (n => n ? `${n} of 3 on` : 'Off')([s.viMe, s.viInnocent, s.viWolf].filter(Boolean).length), voteInfoSettingsHTML(sel, onoff, s))}
     ${lobbySec('end', 'Endgame', `Parity: ${s.parity}${s.fool ? `, hanged Fool: ${s.foolWin === 'end' ? 'game ends' : 'game continues'}` : ''}`, `
       ${sel('parity', [['smart','Smart'],['always','Always'],['never','Never']], 'End when wolves equal villagers')}
       ${sel('parityTimer', [['short','Halved'],['normal','Normal'],['sudden','15 seconds']], 'Wolf timer at parity')}
@@ -2867,7 +2871,8 @@ function resultsHTML(tally = {}, votes, title, o = {}){
 }
 // "In other news, Sasha has the most desirable shoes in the village." (from the night's silly questions)
 const newsLine = ph => ph?.news && FILLERS[ph.news.q] && players()[ph.news.u] ? 'In other news, ' + FILLERS[ph.news.q][1].replace(/\{name\}/g, nameOf(ph.news.u)) : '';
-function revealLine(u){ const r = game.revealed?.[u]; return r ? ` ${nameOf(u)} was ${r === 'werewolf' ? 'a Werewolf' : 'the ' + roleName(r)}.`.replace('the Villager', 'a Villager') : ''; }
+// Always "a Seer", never "the Seer" (owner, 2026-10-08): with two of a role possible, "the" would give away the count.
+function revealLine(u){ const r = game.revealed?.[u]; return r ? ` ${nameOf(u)} was a ${r === 'werewolf' ? 'Werewolf' : roleName(r)}.` : ''; }
 // Phase label and narration line: the same on every phone and on the Town Crier.
 const phaseLabel = ph => ({ deal:'The deal', night:`Night ${ph.n}`, dawn:'Dawn', day:`Day ${ph.n}`, vote: ph.round === 2 ? 'Runoff' : 'The vote', verdict:'Verdict', ended:'Game over' })[ph.name] || '';
 function narrFor(ph){
@@ -2891,7 +2896,7 @@ function narrFor(ph){
 }
 // ---- In-game settings (host): timers and rules that can safely change mid-game, from the next phase. ----
 // Roles, the number of wolves and the game size are fixed once the cards are dealt, so they're shown locked.
-const IN_GAME_SETTINGS = ['speak','discussion','night','voteTime','dayMode','rounds','votes','reveal','parity','parityTimer','foolWin'];
+const IN_GAME_SETTINGS = ['speak','discussion','night','voteTime','dayMode','rounds','votes','reveal','parity','parityTimer','foolWin','viMe','viInnocent','viWolf'];
 let gameSetOpen = false;
 function gameSettingsHTML(){
   const s = settingsOf(game);
@@ -2912,6 +2917,8 @@ function gameSettingsHTML(){
     ${sel('votes', [['public','Public'],['anonymous','Anonymous']], 'Votes')}
     ${sel('reveal', [['true','Reveal'],['false','Keep hidden']], 'Role of the eliminated')}
     <p class="note" style="margin:2px 0 6px">Anyone already revealed stays revealed.</p>
+    <div class="gset-h">Vote information</div>
+    ${voteInfoSettingsHTML(sel, [['true','On'],['false','Off']], s)}
     <div class="gset-h">Endgame</div>
     ${sel('parity', [['smart','Smart'],['always','Always'],['never','Never']], 'End when wolves equal villagers')}
     ${sel('parityTimer', [['short','Halved'],['normal','Normal'],['sudden','15 seconds']], 'Wolf timer at parity')}
@@ -2919,6 +2926,43 @@ function gameSettingsHTML(){
     <p class="note">Locked for this game: the roles (${esc(onRoles)}) and the game size.</p>
     <div class="gset-h">Sound</div>${hostSoundHTML()}
     <div class="row"><button class="btn small" data-act="gset">Close</button></div></div>`;
+}
+// ---- Vote information (owner, 2026-10-08): memory aids built only from what was public: who voted for whom (Public
+// votes) and revealed roles. Buttons on players' phones during the day and the vote (not the Crier). Off by default;
+// the host can change them mid-game.
+function voteInfoSettingsHTML(sel, onoff, s){
+  return `${sel('viMe', onoff, 'See votes against you')}${sel('viInnocent', onoff, 'See who voted out innocents')}${sel('viWolf', onoff, 'See who didn’t vote for a wolf')}
+    <p class="note" style="margin:2px 0 6px">Players get buttons during the day and the vote. They work only with Public votes; the last two need roles revealed.${s.votes !== 'public' ? ' <b>Votes are anonymous now, so these are hidden.</b>' : ''}</p>`;
+}
+let viOpen = null;
+// Rounds whose votes were public (vote records before 2026-10-08 have no pub: then the current setting decides).
+function viVotes(){
+  const s = settingsOf(game), g = game.gameNo || 1;
+  return Object.entries(history).filter(([, v]) => v?.gameNo === g && v.type === 'vote' && (v.pub ?? s.votes === 'public'))
+    .sort(([a], [b]) => a < b ? -1 : 1).map(([, v]) => v);
+}
+function voteInfoHTML(){
+  const s = settingsOf(game), ph = game.phase || {};
+  if(crier || !players()[myUid] || !['day', 'vote'].includes(ph.name) || s.votes !== 'public') return '';
+  const kinds = [['me', s.viMe, 'Votes against me'], ['inn', s.viInnocent && s.reveal, 'Who voted out innocents'], ['wolf', s.viWolf && s.reveal, 'Who didn’t vote for a wolf']].filter(k => k[1]);
+  if(!kinds.length) return '';
+  if(!kinds.some(k => k[0] === viOpen)) viOpen = null;
+  const R = game.revealed || {}, N = u => esc(nameOf(u)) + (isAlive(u) ? '' : ' †'), day = e => `Day ${e.n}${e.round === 2 ? ' (runoff)' : ''}`;
+  const role = u => R[u] === 'werewolf' ? 'a Werewolf' : 'a ' + roleName(R[u]);
+  let rows = [];
+  for(const e of viVotes()){
+    const V = e.votes || {}, forU = u => Object.keys(V).filter(v => V[v] === u);
+    if(viOpen === 'me'){ const vs = forU(myUid); if(vs.length) rows.push(`<b>${day(e)}:</b> ${vs.map(N).join(', ')}`); }
+    if(viOpen === 'inn' && e.eliminated && R[e.eliminated] && R[e.eliminated] !== 'werewolf')
+      rows.push(`<b>${day(e)}:</b> ${N(e.eliminated)} (${role(e.eliminated)}) was voted out by ${forU(e.eliminated).map(N).join(', ') || 'no one'}.`);
+    if(viOpen === 'wolf' && e.eliminated && R[e.eliminated] === 'werewolf'){
+      const not = Object.keys(V).filter(v => V[v] !== e.eliminated && v !== e.eliminated);
+      rows.push(`<b>${day(e)}:</b> ${N(e.eliminated)} (a Werewolf) was hanged. Didn’t vote for them: ${not.map(v => `${N(v)} (${V[v] === 'abstain' ? 'abstained' : 'voted ' + esc(nameOf(V[v]))})`).join(', ') || 'no one'}.`);
+    }
+  }
+  const empty = { me:'Nobody has voted against you yet.', inn:'No innocent has been voted out yet.', wolf:'No wolf has been hanged yet.' }[viOpen];
+  return `<div class="vi"><div class="row">${kinds.map(([k, , label]) => `<button class="btn small${viOpen === k ? ' pri' : ''}" data-act="vi" data-k="${k}">${label}</button>`).join('')}</div>` +
+    (viOpen ? `<div class="card vi-list">${rows.length ? rows.map(r => `<p>${r}</p>`).join('') : `<p class="note">${empty}</p>`}<p class="note">† = dead</p></div>` : '') + '</div>';
 }
 // The host's sound controls (lobby and in-game Settings): this device's own switches. With a Town Crier
 // connected the Crier plays the sound, so they're shown greyed out.
@@ -2975,7 +3019,7 @@ function renderGame(){
     panel = verdictPanel(ph);
   }
   setText('narr', narr);
-  setHTML('panel', panel);
+  setHTML('panel', panel + voteInfoHTML());
   // Host bar
   const away = !host && game.status === 'playing' && game.hostBeat && now() - game.hostBeat > 20000;
   setHTML('hostbar', host && game.status === 'playing'
@@ -3012,15 +3056,16 @@ function recapHTML(){
       const saves = e.witchSaves || (e.witchSave ? [e.witchBy] : []);
       const kills = e.witchKills || (e.witchKill ? [{ by: e.witchBy, target: e.witchKill }] : []);
       const seers = e.seers || (e.seer ? [e.seer] : []);
-      for(const [by, t] of docs) lines.push(`The Doctor${by && docs.length > 1 ? ` (${N(by)})` : ''} guarded ${N(t)}.`);
-      for(const by of saves) lines.push(`The Witch${by && saves.length + kills.length > 1 ? ` (${N(by)})` : ''} saved ${N(e.wolfTarget)}.`);
-      for(const k of kills) lines.push(`The Witch${k.by && saves.length + kills.length > 1 ? ` (${N(k.by)})` : ''} poisoned ${N(k.target)}.`);
-      for(const x of seers) lines.push(`The Seer (${N(x.by)}) checked ${N(x.target)}: ${x.wolf ? 'a wolf' : 'not a wolf'}.`);
-      const R = u => { const r = game.revealed?.[u]; return r ? (r === 'werewolf' ? 'a Werewolf' : r === 'villager' ? 'a Villager' : 'the ' + roleName(r)) : 'role unknown'; };
+      // "A Doctor (Mike)", never "the Doctor": the wording doesn't tell how many of a role there were.
+      for(const [by, t] of docs) lines.push(`A Doctor${by ? ` (${N(by)})` : ''} guarded ${N(t)}.`);
+      for(const by of saves) lines.push(`A Witch${by ? ` (${N(by)})` : ''} saved ${N(e.wolfTarget)}.`);
+      for(const k of kills) lines.push(`A Witch${k.by ? ` (${N(k.by)})` : ''} poisoned ${N(k.target)}.`);
+      for(const x of seers) lines.push(`A Seer (${N(x.by)}) checked ${N(x.target)}: ${x.wolf ? 'a wolf' : 'not a wolf'}.`);
+      const R = u => { const r = game.revealed?.[u]; return r ? (r === 'werewolf' ? 'a Werewolf' : r === 'villager' ? 'a Villager' : 'a ' + roleName(r)) : 'role unknown'; };
       const pack = Object.keys(e.wolfPicks || {});
       for(const u of e.deaths || []){
         if(u === e.wolfTarget && !e.saved) lines.push(`<b>${N(u)}</b> (${R(u)}) was killed by the wolves: ${pack.map(N).join(' and ')}.`);
-        else { const k = kills.find(x => x.target === u); if(k) lines.push(`<b>${N(u)}</b> (${R(u)}) was poisoned by the Witch: ${k.by ? N(k.by) : 'unknown'}.`); }
+        else { const k = kills.find(x => x.target === u); if(k) lines.push(`<b>${N(u)}</b> (${R(u)}) was poisoned by a Witch: ${k.by ? N(k.by) : 'unknown'}.`); }
       }
       if(!e.deaths?.length) lines.push('Nobody died.');
       return `<h3>Night ${e.n}</h3>` + lines.map(l => `<p>${l}</p>`).join('');
@@ -3029,7 +3074,7 @@ function recapHTML(){
     const by = {}, abst = [];
     for(const [v, c] of Object.entries(e.votes || {})) (c === 'abstain' ? abst : (by[c] = by[c] || [])).push(v);
     const votes = Object.entries(by).sort((a, b) => b[1].length - a[1].length || nameOf(a[0]).localeCompare(nameOf(b[0])));
-    const RR = u => { const r = game.revealed?.[u]; return r ? (r === 'werewolf' ? 'a Werewolf' : r === 'villager' ? 'a Villager' : 'the ' + roleName(r)) : 'role unknown'; };
+    const RR = u => { const r = game.revealed?.[u]; return r ? (r === 'werewolf' ? 'a Werewolf' : r === 'villager' ? 'a Villager' : 'a ' + roleName(r)) : 'role unknown'; };
     // A runoff's result is its own entry ("Day N, runoff"); if there is none, the game ended before it was decided.
     const next = ents[ents.indexOf(e) + 1], unfinished = e.runoff && !(next?.type === 'vote' && next.n === e.n && next.round === 2);
     const tieAgain = e.round === 2 && !e.eliminated && votes.length > 1 && votes[0][1].length === votes[1][1].length;
@@ -3364,6 +3409,7 @@ document.addEventListener('click', async e => {
       case 'snd-close': soundOpen = false; return renderSoundUI();
       case 'gset': gameSetOpen = !gameSetOpen; return render();
       case 'hipb': hipbOpen = !hipbOpen; return render();
+      case 'vi': viOpen = viOpen === el.dataset.k ? null : el.dataset.k; return render();
       // Splash screen and How to Play (the walkthrough plays only when someone asks for it)
       case 'splash-start': return endSplash();
       case 'howto': return openHowTo('watch');
@@ -3586,7 +3632,7 @@ const HT_BEATS = [
       htSfx('snarl'); setTimeout(() => { if(live()) htSfx('rooster'); }, 2600); },
     min: 4500, t:'The sun rises… and the village counts its dead.' },
   { ch:4, bg:'dawn', svg: () => htCrowd(6, 'dawn') + htBody('witch', 0),
-    card: () => `<div class="ht-card">${htMed('witch', 'Marta', true)}<div class="reveal-line">Marta was the Witch.</div></div>`,
+    card: () => `<div class="ht-card">${htMed('witch', 'Marta', true)}<div class="reveal-line">Marta was a Witch.</div></div>`,
     run: () => htSfx('deathReveal'), t:'Marta did not survive the night. Her role may be revealed… or kept secret, as the host chooses.' },
   { ch:4, bg:'dawn', svg: () => htCrowd(7, 'dawn'), run: () => htSfx('noDeath'), t:'Some mornings, everyone wakes. The danger has not passed.' },
   // 6 The day
