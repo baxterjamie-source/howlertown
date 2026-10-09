@@ -235,7 +235,7 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
   padding:14px 22px;opacity:0;transition:opacity .5s;text-shadow:0 2px 6px #000}
 .hostnote.on{opacity:1}
 .recap-ro{margin:4px 0 10px 14px;padding-left:12px;border-left:2px solid var(--line)}.recap-ro h4{margin:6px 0 4px;font-weight:600}
-.vi{margin:10px 0}.vi-list p{margin:4px 0}
+.vi{margin:10px 0}.vi-list p{margin:4px 0}.vi-dead{color:#e0705f;text-decoration:line-through;text-decoration-thickness:1.5px}
 .bal{margin:12px 0 6px}.bal-l{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:14px;margin-bottom:4px}.bal-l b{font-family:var(--serif);font-weight:400;font-size:17px}
 .bal-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;border:1px solid var(--line)}.bal-bar i{display:block;height:100%}
 .bal-bar .bw{background:#b3352a}.bal-bar .bf{background:#c9a227}.bal-bar .bv{flex:1;background:#4a78a8}.bal .note{margin:4px 0 0}
@@ -2948,7 +2948,8 @@ function voteInfoHTML(){
   const kinds = [['me', s.viMe, 'Votes against me'], ['inn', s.viInnocent && s.reveal, 'Who voted out innocents'], ['wolf', s.viWolf && s.reveal, 'Who didn’t vote for a wolf']].filter(k => k[1]);
   if(!kinds.length) return '';
   if(!kinds.some(k => k[0] === viOpen)) viOpen = null;
-  const R = game.revealed || {}, N = u => esc(nameOf(u)) + (isAlive(u) ? '' : ' †'), day = e => `Day ${e.n}${e.round === 2 ? ' (runoff)' : ''}`;
+  // The dead are crossed out in red rather than marked with a symbol (owner: easier to read at a glance).
+  const R = game.revealed || {}, N = u => isAlive(u) ? esc(nameOf(u)) : `<span class="vi-dead">${esc(nameOf(u))}</span>`, day = e => `Day ${e.n}${e.round === 2 ? ' (runoff)' : ''}`;
   const role = u => R[u] === 'werewolf' ? 'a Werewolf' : 'a ' + roleName(R[u]);
   let rows = [];
   for(const e of viVotes()){
@@ -2958,12 +2959,12 @@ function voteInfoHTML(){
       rows.push(`<b>${day(e)}:</b> ${N(e.eliminated)} (${role(e.eliminated)}) was voted out by ${forU(e.eliminated).map(N).join(', ') || 'no one'}.`);
     if(viOpen === 'wolf' && e.eliminated && R[e.eliminated] === 'werewolf'){
       const not = Object.keys(V).filter(v => V[v] !== e.eliminated && v !== e.eliminated);
-      rows.push(`<b>${day(e)}:</b> ${N(e.eliminated)} (a Werewolf) was hanged. Didn’t vote for them: ${not.map(v => `${N(v)} (${V[v] === 'abstain' ? 'abstained' : 'voted ' + esc(nameOf(V[v]))})`).join(', ') || 'no one'}.`);
+      rows.push(`<b>${day(e)}:</b> ${N(e.eliminated)} (a Werewolf) was hanged. Didn’t vote for them: ${not.map(v => `${N(v)} (${V[v] === 'abstain' ? 'abstained' : 'voted ' + N(V[v])})`).join(', ') || 'no one'}.`);
     }
   }
   const empty = { me:'Nobody has voted against you yet.', inn:'No innocent has been voted out yet.', wolf:'No wolf has been hanged yet.' }[viOpen];
   return `<div class="vi"><div class="row">${kinds.map(([k, , label]) => `<button class="btn small${viOpen === k ? ' pri' : ''}" data-act="vi" data-k="${k}">${label}</button>`).join('')}</div>` +
-    (viOpen ? `<div class="card vi-list">${rows.length ? rows.map(r => `<p>${r}</p>`).join('') : `<p class="note">${empty}</p>`}<p class="note">† = dead</p></div>` : '') + '</div>';
+    (viOpen ? `<div class="card vi-list">${rows.length ? rows.map(r => `<p>${r}</p>`).join('') : `<p class="note">${empty}</p>`}<p class="note"><span class="vi-dead">Crossed out</span> = dead</p></div>` : '') + '</div>';
 }
 // The host's sound controls (lobby and in-game Settings): this device's own switches. With a Town Crier
 // connected the Crier plays the sound, so they're shown greyed out.
