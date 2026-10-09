@@ -234,7 +234,8 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
   font-family:var(--serif);font-size:clamp(20px,5vw,38px);color:#f3e6c8;background:rgba(10,12,20,.55);border:1px solid rgba(224,162,74,.45);border-radius:16px;
   padding:14px 22px;opacity:0;transition:opacity .5s;text-shadow:0 2px 6px #000}
 .hostnote.on{opacity:1}
-.ver{position:fixed;left:50%;bottom:4px;transform:translateX(-50%);z-index:50;pointer-events:none;font-size:11px;letter-spacing:.04em;color:#c9b88f;opacity:.45}
+.ver{position:fixed;left:50%;bottom:4px;transform:translateX(-50%);z-index:99999;pointer-events:none;white-space:nowrap;font-size:12px;letter-spacing:.04em;
+  color:#e3d3a6;background:rgba(5,7,12,.82);border:1px solid rgba(201,184,143,.25);border-radius:8px;padding:1px 8px}
 .rules{position:fixed;inset:0;z-index:8500;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(6,8,14,.55);
   opacity:0;pointer-events:none;transition:opacity .8s}
 .rules.on{opacity:1}
@@ -1043,7 +1044,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const now = () => Date.now();
 // Shown small at the bottom of every screen, so it's easy to tell which version a device is running (owner,
 // 2026-10-09). Bump it with every change that's uploaded: date, then a letter for each upload that day.
-const APP_VERSION = '2026-10-09 b';
+const APP_VERSION = '2026-10-09 c';
 // The page is already parsed when this module runs.
 if(document.getElementById('ver')) document.getElementById('ver').textContent = 'v ' + APP_VERSION;
 const rnd = a => a[Math.floor(Math.random() * a.length)];
