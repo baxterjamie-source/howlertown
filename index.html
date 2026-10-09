@@ -1044,7 +1044,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const now = () => Date.now();
 // Shown small at the bottom of every screen, so it's easy to tell which version a device is running (owner,
 // 2026-10-09). Bump it with every change that's uploaded: date, then a letter for each upload that day.
-const APP_VERSION = '2026-10-09 c';
+const APP_VERSION = '2026-10-09 d';
 // The page is already parsed when this module runs.
 if(document.getElementById('ver')) document.getElementById('ver').textContent = 'v ' + APP_VERSION;
 const rnd = a => a[Math.floor(Math.random() * a.length)];
@@ -2381,8 +2381,12 @@ const pts3 = f => [[f[0], f[1]], [f[2], f[3]], [f[4], f[5]]];
 // ---- Every screen: draw the published ravens. --------------------------------------------------------------------
 const ravenLocal = {};                                   // roost → { key, perch, m, fly, landed, turned, idle }
 let ravenLoopOn = false, ravenCawSeen = 0;
+// In a game, the published ravens; outside one (home, splash, lobby) each screen keeps its own silent ravens (owner:
+// ravens throughout, like the smoke, windows, eyes and bats).
+const ravenOff = {};
+const ravenState = () => game?.status === 'playing' ? (game.ravens || {}) : ravenOff;
 function ravenFrame(){
-  const layer = $('fx-ravens'), st = game?.status === 'playing' ? (game.ravens || {}) : {}, t = now();
+  const layer = $('fx-ravens'), st = ravenState(), t = now();
   if(!layer){ ravenLoopOn = false; return; }
   const night = game?.phase?.name === 'night';
   for(const k of Object.keys(ravenLocal)) if(!st[k] || st[k].id !== ravenLocal[k].key){ ravenLocal[k].perch?.remove(); ravenLocal[k].fly?.g.remove(); clearTimeout(ravenLocal[k].idle); delete ravenLocal[k]; }
@@ -2408,18 +2412,19 @@ function ravenFrame(){
       L.idle = setTimeout(idle, 1500); }
   }
   // A published caw: the beak opens on every screen; the sound device plays raven.mp3 at the same moment.
-  const c = game?.ravenCaw;
+  const c = game?.status === 'playing' ? game.ravenCaw : null;
   if(c && c.at !== ravenCawSeen && t >= c.at){ ravenCawSeen = c.at;
     if(t - c.at < 1500 && ravenLocal[c.r]?.landed){ ravenLocal[c.r].m.caw(); if(isSoundDevice()) playSound('raven', { random:true }); } }
   if(Object.values(st).some(Boolean) || Object.keys(ravenLocal).length) requestAnimationFrame(ravenFrame); else ravenLoopOn = false;
 }
-setInterval(() => { if(!ravenLoopOn && $('fx-ravens') && (Object.values(game?.ravens || {}).some(Boolean) || Object.keys(ravenLocal).length)){ ravenLoopOn = true; requestAnimationFrame(ravenFrame); } }, 500);
-// ---- The sound device: decide arrivals, departures and caws, and publish them. ------------------------------------
+setInterval(() => { if(!ravenLoopOn && $('fx-ravens') && (Object.values(ravenState()).some(Boolean) || Object.keys(ravenLocal).length)){ ravenLoopOn = true; requestAnimationFrame(ravenFrame); } }, 500);
+// ---- Deciding arrivals, departures and caws. In a game the sound device does it and publishes; outside a game each
+// screen does it for itself, with no caws (no sound plays outside a game). ----------------------------------------
 let ravenNextIn = 0, ravenNextCaw = 0;
 setInterval(() => {
-  const ph = game?.phase, t = now();
-  if(!game || !isSoundDevice() || game.status !== 'playing') return;
-  const st = game.ravens || {}, live = Object.entries(st).filter(([, r]) => r && !r.l).map(([k]) => +k), up = {}, R = (a, b) => a + Math.random() * (b - a);
+  const ph = game?.status === 'playing' ? game.phase : null, t = now(), playing = game?.status === 'playing';
+  if(playing && !isSoundDevice()) return;
+  const st = ravenState(), live = Object.entries(st).filter(([, r]) => r && !r.l).map(([k]) => +k), up = {}, R = (a, b) => a + Math.random() * (b - a);
   // Finished departures are cleared.
   for(const [k, r] of Object.entries(st)) if(r && r.l && t > r.l + r.ld + 500) up[`ravens.${k}`] = null;
   const vote = ph?.name === 'vote', pausedOrIntro = ph?.pausedAt || introRunning(ph);
@@ -2444,12 +2449,14 @@ setInterval(() => {
     }
     // Caws: rationed. More ravens, a few more caws, never a chorus; never over speech or another sound.
     const perched = live.filter(k => t > st[k].a + st[k].d + 1500);
-    if(perched.length && t > ravenNextCaw && !speaking && t >= busyUntil && !randomNow.size){
+    if(playing && perched.length && t > ravenNextCaw && !speaking && t >= busyUntil && !randomNow.size){
       up.ravenCaw = { r: rnd(perched), at: t + 400 };
       ravenNextCaw = t + R(14000, 26000) / Math.sqrt(perched.length);
     } else if(!ravenNextCaw) ravenNextCaw = t + R(6000, 12000);
   }
-  if(Object.keys(up).length) DB.update(gp(), up).catch(() => {});
+  if(!Object.keys(up).length) return;
+  if(playing) DB.update(gp(), up).catch(() => {});
+  else for(const [key, v] of Object.entries(up)) if(key.startsWith('ravens.')){ const k = key.slice(7); if(v) ravenOff[k] = v; else delete ravenOff[k]; }
 }, 1000);
 // The moon rises over the forest road as each night begins (once the nightfall animation has finished).
 let moonKey = null;
