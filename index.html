@@ -239,6 +239,9 @@ body.crier #crier{display:block;position:fixed;inset:0;z-index:5;pointer-events:
   font-family:var(--serif);font-size:clamp(20px,5vw,38px);color:#f3e6c8;background:rgba(10,12,20,.55);border:1px solid rgba(224,162,74,.45);border-radius:16px;
   padding:14px 22px;opacity:0;transition:opacity .5s;text-shadow:0 2px 6px #000}
 .hostnote.on{opacity:1}
+.snd-row{display:flex;align-items:center;gap:8px;width:60%}
+.snd-row input{flex:1;min-width:0}
+.snd-x{min-width:3.6em;font-size:13px;color:var(--dim);white-space:nowrap}
 #passive{display:none}
 #passive.on{display:grid;place-items:center;position:fixed;inset:0;z-index:100000;background:rgba(6,8,14,.94);padding:16px}
 #passive .pv-box{max-width:420px;text-align:center;color:#f3e6c8;border:1px solid rgba(224,162,74,.45);border-radius:16px;padding:22px;background:rgba(14,17,28,.9)}
@@ -477,11 +480,19 @@ const SOUNDS = {
 // Each device keeps its own switches and volume (the Crier's matter most).
 const soundPrefs = (() => { try{ return { ambient:true, event:true, narrator:true, captions:true, volume:.8, ...JSON.parse(localStorage.getItem('howlertown_sound') || '{}') }; }
   catch{ return { ambient:true, event:true, narrator:true, captions:true, volume:.8 }; } })();
+// Ambient, Event and Narrator are volume sliders (owner, 2026-10-12): 0 to 1, where 0 is Off. Older devices
+// stored on/off switches: On becomes full volume, Off becomes 0.
+for(const k of ['ambient', 'event', 'narrator']) if(typeof soundPrefs[k] !== 'number') soundPrefs[k] = soundPrefs[k] === false ? 0 : 1;
 const saveSoundPrefs = () => { try{ localStorage.setItem('howlertown_sound', JSON.stringify(soundPrefs)); }catch{} };
-let actx = null, master = null; const buffers = {}, loops = {};
+let actx = null, master = null; const buffers = {}, loops = {}, catGains = {};
 function audio(){
   if(!actx){ try{ actx = new (window.AudioContext || window.webkitAudioContext)(); master = actx.createGain(); master.gain.value = soundPrefs.volume; master.connect(actx.destination); }catch{ return null; } }
   return actx;
+}
+// Each group (ambient / event) has its own volume between the sound and the overall volume.
+function catOut(cat){
+  if(!catGains[cat]){ catGains[cat] = actx.createGain(); catGains[cat].gain.value = +soundPrefs[cat] || 0; catGains[cat].connect(master); }
+  return catGains[cat];
 }
 const audioLocked = () => !actx || actx.state !== 'running';
 // Browsers only allow sound after a click or tap on the page.
@@ -511,7 +522,7 @@ async function playSound(slot, o = {}){
   const buf = await loadBuffer(rnd(s.files)); if(!buf) return;
   const src = c.createBufferSource(), g = c.createGain();
   src.buffer = buf; src.loop = !!s.loop; g.gain.value = (s.vol || 1) * (o.vol || 1);
-  src.connect(g); g.connect(master); src.start();
+  src.connect(g); g.connect(catOut(s.cat)); src.start();
   const h = { src, g };
   // Random ambience gives way to planned moments; everything else keeps speech waiting until it ends.
   if(o.random){ randomNow.add(h); src.onended = () => randomNow.delete(h); }
@@ -885,7 +896,7 @@ async function speakLine(text, style, live = () => true, test){
     await new Promise(res => {
       const u = new SpeechSynthesisUtterance(p.t);
       if(v){ u.voice = v; u.lang = v.lang; }
-      u.rate = p.rate || st.rate; u.pitch = st.pitch; u.volume = soundPrefs.volume;
+      u.rate = p.rate || st.rate; u.pitch = st.pitch; u.volume = soundPrefs.volume * soundPrefs.narrator;
       const to = setTimeout(res, partMs(p) * 2 + 2000);      // some browsers never fire onend
       u.onend = u.onerror = () => { clearTimeout(to); res(); };
       speechSynthesis.speak(u);
@@ -933,14 +944,16 @@ setInterval(() => {
 }, 200);
 // The sound panel: on the sound device only (the Crier, or the host when there's no Crier).
 let soundOpen = false;
+// A volume slider (owner, 2026-10-12): all the way left is Off, shown as "✕ Off" beside it.
+const SND_SLIDERS = [['volume', 'Volume'], ['ambient', 'Ambient sounds'], ['event', 'Event sounds'], ['narrator', 'Narrator']];
+const sndSlider = (k, label, dis = '') => `<label class="f">${label}<span class="snd-row"><input type="range" min="0" max="1" step="0.05" value="${+soundPrefs[k] || 0}" data-snd="${k}" ${dis}><span class="snd-x" data-sndx="${k}">${+soundPrefs[k] ? '' : '✕ Off'}</span></span></label>`;
+const sndSliders = dis => SND_SLIDERS.map(([k, l]) => sndSlider(k, l, dis)).join('');
 function soundPanelHTML(){
   if(!soundOpen) return '';
-  const sw = (k, label) => `<label class="f">${label}<select data-snd="${k}"><option value="true" ${soundPrefs[k] ? 'selected' : ''}>On</option><option value="false" ${soundPrefs[k] ? '' : 'selected'}>Off</option></select></label>`;
   const vs = narrVoices(), cur = narrVoice()?.voiceURI;
   const voice = vs.length ? `<label class="f">Voice<select data-snd="voice">${vs.map(v => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === cur ? 'selected' : ''}>${esc(v.name.replace(/^Microsoft |^Google /, '').slice(0, 34))}</option>`).join('')}</select></label>`
     : '<p class="note">This device has no built-in voice, so the narrator stays silent.</p>';
-  return `<div class="sndpanel"><b>Sound</b>${sw('ambient', 'Ambient sounds')}${sw('event', 'Event sounds')}${sw('narrator', 'Narrator')}${voice}
-    <label class="f">Volume<input type="range" min="0" max="1" step="0.05" data-snd="volume" style="max-width:55%"></label>
+  return `<div class="sndpanel"><b>Sound</b>${sndSliders()}${voice}
     <div class="row"><button class="btn small" data-act="snd-test">Test sound</button>${vs.length ? '<button class="btn small" data-act="snd-voice">Test voice</button>' : ''}<button class="btn small" data-act="snd-close">Close</button></div>
     <p class="note">Missing sound files are silent. Put them in the sounds/ folder next to index.html.</p></div>`;
 }
@@ -952,7 +965,14 @@ function renderSoundUI(){
   if(game && isSoundDevice()) preloadSounds();
   const show = game && (crier || isSoundDevice());
   setHTML('sndui', !show ? '' : soundPanelHTML() + `<div class="row">${soundButtonHTML()}${crier ? '<button class="btn small c-leave" data-act="crier-leave">Leave Town Crier</button>' : ''}</div>`);
-  const v = document.querySelector('[data-snd=volume]'); if(v && document.activeElement !== v) v.value = soundPrefs.volume;
+  syncSoundSliders();
+}
+// Keep every slider on screen in step with this device's settings (except the one being dragged).
+function syncSoundSliders(){
+  for(const [k] of SND_SLIDERS){
+    for(const el of document.querySelectorAll(`[data-snd="${k}"]`)) if(document.activeElement !== el) el.value = +soundPrefs[k] || 0;
+    for(const x of document.querySelectorAll(`[data-sndx="${k}"]`)) x.textContent = +soundPrefs[k] ? '' : '✕ Off';
+  }
 }
 // The test plays a short chime even with no files, to prove the speakers work.
 function testChime(){
@@ -1057,7 +1077,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const now = () => Date.now();
 // Shown small at the bottom of every screen, so it's easy to tell which version a device is running (owner,
 // 2026-10-09). Bump it with every change that's uploaded: date, then a letter for each upload that day.
-const APP_VERSION = '2026-10-09 j';
+const APP_VERSION = '2026-10-12 a';
 // The page is already parsed when this module runs.
 if(document.getElementById('ver')) document.getElementById('ver').textContent = 'v ' + APP_VERSION;
 const rnd = a => a[Math.floor(Math.random() * a.length)];
@@ -3306,9 +3326,7 @@ function voteInfoHTML(){
 // connected the Crier plays the sound, so they're shown greyed out.
 function hostSoundHTML(){
   const off = liveCriers().length > 0, dis = off ? 'disabled' : '';
-  const sw = (k, label) => `<label class="f">${label}<select data-snd="${k}" ${dis}><option value="true" ${soundPrefs[k] ? 'selected' : ''}>On</option><option value="false" ${soundPrefs[k] ? '' : 'selected'}>Off</option></select></label>`;
-  return `<div class="${off ? 'snd-off' : ''}">${off ? '<p class="note" style="margin:2px 0">Controlled by Town Crier</p>' : ''}${sw('ambient', 'Ambient sounds')}${sw('event', 'Event sounds')}${sw('narrator', 'Narrator')}
-    <label class="f">Volume<input type="range" min="0" max="1" step="0.05" value="${soundPrefs.volume}" data-snd="volume" style="max-width:55%" ${dis}></label>
+  return `<div class="${off ? 'snd-off' : ''}">${off ? '<p class="note" style="margin:2px 0">Controlled by Town Crier</p>' : ''}${sndSliders(dis)}
     ${off ? '' : '<div class="row"><button class="btn small" data-act="snd-test">Test sound</button></div>'}</div>`;
 }
 // ---- The rules overlay (owner, 2026-10-09): when the host presses Start, every screen (phones and the Crier) shows
@@ -3867,13 +3885,14 @@ document.addEventListener('click', async e => {
 // Sound switches and volume belong to this device only.
 document.addEventListener('input', e => {
   const el = e.target.closest('[data-snd]'); if(!el) return;
-  const k = el.dataset.snd;
-  soundPrefs[k] = k === 'volume' ? +el.value : k === 'voice' ? el.value : el.value === 'true';
+  const k = el.dataset.snd, was = +soundPrefs[k];
+  soundPrefs[k] = k === 'voice' ? el.value : +el.value;
   if(k === 'narrator' && !soundPrefs.narrator) try { speechSynthesis.cancel(); } catch(_) {}
   if(k === 'volume' && master) master.gain.value = soundPrefs.volume;
+  if(catGains[k]) catGains[k].gain.value = soundPrefs[k];
   if(k === 'ambient' && !soundPrefs.ambient) stopAllLoops();
-  if(k === 'ambient' && soundPrefs.ambient && game?.status === 'playing' && game.phase?.name === 'day') startLoop('murmur');
-  saveSoundPrefs();
+  if(k === 'ambient' && soundPrefs.ambient && !was && game?.status === 'playing' && game.phase?.name === 'day') startLoop('murmur');
+  saveSoundPrefs(); syncSoundSliders();
 });
 document.addEventListener('change', e => {
   const el = e.target.closest('[data-set]'); if(!el || !isHost()) return;
@@ -4052,7 +4071,7 @@ async function htSfx(slot){
   const c = audio(); if(!c) return; if(c.state !== 'running') await c.resume().catch(() => {});
   const buf = await loadBuffer(s.files[0]); if(!buf || !htState.playing) return;
   const src = c.createBufferSource(), g = c.createGain(), v = s.vol || 1; src.buffer = buf; g.gain.value = v * (htState.talking ? HT_DUCK : 1);
-  src.connect(g); g.connect(master); src.start(); htNodes.push({ src, g, v });
+  src.connect(g); g.connect(catOut(s.cat)); src.start(); htNodes.push({ src, g, v });
 }
 // While the narrator speaks, the walkthrough's sounds drop to 20% (owner: they talked over the narrator), and
 // come back up between lines.
