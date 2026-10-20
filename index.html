@@ -267,6 +267,14 @@ body.crier .rules-card{width:min(720px,90vw)}
 .tryit{position:fixed;inset:0;z-index:9500;background:rgba(4,6,12,.72);display:flex;align-items:center;justify-content:center;padding:16px}
 .tryit.hidden{display:none}
 .tryit .card{max-width:420px;width:100%}
+/* Scan-to-join QR: a white card, so any phone camera reads it */
+.tryit.qr{background:rgba(4,6,12,.94)}
+.qr-card{background:#fff;color:#1b1b1f;border-radius:20px;padding:18px 18px 16px;text-align:center;max-width:440px;width:100%}
+.qr-card h2{margin:0 0 8px;color:#1b1b1f}
+.qr-img img{display:block;width:min(78vw,380px);height:auto;margin:0 auto;image-rendering:pixelated}
+.qr-code{font-family:var(--serif);font-size:18px;color:#555;margin:8px 0 12px;letter-spacing:.06em}
+.qr-code b{font-size:30px;color:#1b1b1f;letter-spacing:.12em}
+.qr-card .btn{background:#1b1b1f;color:#fff;border-color:#1b1b1f}
 .sndpanel b{font-family:var(--serif);font-weight:400;font-size:19px}
 #sndcap{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:60;pointer-events:none;display:flex;flex-direction:column;gap:4px;align-items:center}
 #sndcap div{background:rgba(15,19,32,.88);border:1px solid var(--ember);color:var(--ember);border-radius:999px;padding:4px 12px;font-size:15px;white-space:nowrap}
@@ -1077,7 +1085,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const now = () => Date.now();
 // Shown small at the bottom of every screen, so it's easy to tell which version a device is running (owner,
 // 2026-10-09). Bump it with every change that's uploaded: date, then a letter for each upload that day.
-const APP_VERSION = '2026-10-12 a';
+const APP_VERSION = '2026-10-20 a';
 // The page is already parsed when this module runs.
 if(document.getElementById('ver')) document.getElementById('ver').textContent = 'v ' + APP_VERSION;
 const rnd = a => a[Math.floor(Math.random() * a.length)];
@@ -2059,7 +2067,35 @@ function openTry(){
     <div class="row"><button class="btn" data-act="try-back">Go Back</button><button class="btn pri" data-act="try-go">Proceed</button></div></div>`;
   $('tryit').classList.remove('hidden');
 }
-const closeTry = () => { $('tryit').classList.add('hidden'); $('tryit').innerHTML = ''; };
+const closeTry = () => { $('tryit').classList.add('hidden'); $('tryit').classList.remove('qr'); $('tryit').innerHTML = ''; };
+// ---- Scan to join (owner, 2026-10-20, as in Balderlaugh) ----
+// The host's lobby button shows a big QR code of this page + ?join=CODE, on a white card any phone camera reads.
+// Scanning it opens a "Join game" box with this phone's saved name filled in: one tap and they're in the lobby.
+async function openQr(){
+  if(!code) return;
+  $('tryit').classList.add('qr');
+  $('tryit').innerHTML = `<div class="qr-card"><h2>📱 Scan to join</h2><div class="qr-img"><p class="note">Drawing the code…</p></div>
+    <div class="qr-code">CODE <b>${esc(code)}</b></div><div class="row" style="justify-content:center"><button class="btn" data-act="try-back">Close</button></div></div>`;
+  $('tryit').classList.remove('hidden');
+  const img = await qrDataURL(joinURL()), box = document.querySelector('#tryit .qr-img');
+  if(box) box.innerHTML = img ? `<img src="${img}" alt="QR code to join game ${esc(code)}">` : '<p class="warn">Couldn’t draw the QR code. Use the code below instead.</p>';
+}
+function openJoinPrompt(c){
+  const n = ls.get('howlertown_name') || '';
+  $('tryit').innerHTML = `<div class="card"><h2 style="margin-top:0">Join game ${esc(c)}</h2>
+    <label class="f">Your name<input id="qrj-name" maxlength="16" value="${esc(n)}" autocomplete="nickname"></label><p class="warn" id="qrj-err"></p>
+    <div class="row"><button class="btn" data-act="try-back">Not now</button><button class="btn pri" data-act="qr-join" data-code="${esc(c)}">Join</button></div></div>`;
+  $('tryit').classList.remove('hidden');
+  const inp = $('qrj-name'); inp.focus(); inp.select();
+  inp.addEventListener('keydown', e => { if(e.key === 'Enter') qrJoin(c); });
+}
+async function qrJoin(c){
+  const name = ($('qrj-name')?.value || '').trim(); if(!name){ $('qrj-err').textContent = 'Enter your name first.'; return; }
+  $('in-name').value = name; $('home-err').textContent = '';
+  await joinGame(c);
+  // joinGame reports problems (no such game, already started, full) on the home screen; show them here too.
+  if(code === c) closeTry(); else $('qrj-err').textContent = $('home-err').textContent || 'Couldn’t join that game.';
+}
 async function tryItNow(){
   const name = ($('try-name')?.value || '').trim(); if(!name){ $('try-err').textContent = 'Enter your name first.'; return; }
   myName = name; ls.set('howlertown_name', name); if($('in-name')) $('in-name').value = name;
@@ -2721,6 +2757,7 @@ function renderLobby(){
   const away = !host && game.hostBeat && now() - game.hostBeat > 20000;
   setHTML('lobby', `
     <div class="top"><span>Game code</span><span class="tag">${esc(code)}</span></div>
+    ${host ? '<div class="row" style="margin-top:8px"><button class="btn full" data-act="qr-show">📱 Show QR code so others can join</button></div>' : ''}
     <p class="narr">${say('lobby', 0)}</p>
     ${lobbySec('players', `Players (${list.length})`, (() => { const b = list.filter(u => players()[u].bot).length;
         return `${list.length - b} ${list.length - b === 1 ? 'person' : 'people'}${b ? `, ${b} bot${b === 1 ? '' : 's'}` : ''}${s.seats !== 'any' ? `, ${seatCap(game)} seats` : ''}`; })(), `
@@ -3481,17 +3518,20 @@ const dawnDetail = ph => (ph.deaths || []).length ? `<div class="card">${ph.deat
 
 // ---- Town Crier screen ----
 const joinURL = () => `${location.origin}${location.pathname}?join=${encodeURIComponent(code)}${MOCK ? '&mock' : ''}`;
-// The QR code library loads only on a Crier, from cdnjs; without it the screen shows just the code.
+// The QR code library loads only when a QR code is needed (the Crier, or the host's "Show QR code"), from
+// cdnjs; without it the screen shows just the code.
 const qrCache = {}; let qrLib = null;
+function qrDataURL(url){
+  qrLib = qrLib || new Promise((res, rej) => { const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); });
+  return qrLib.then(() => { const d = document.createElement('div');
+      new QRCode(d, { text: url, width: 512, height: 512, correctLevel: QRCode.CorrectLevel.M });
+      return d.querySelector('canvas')?.toDataURL() || ''; }).catch(() => '');
+}
 function qrImage(url){
   if(url in qrCache) return qrCache[url];
   qrCache[url] = null;
-  qrLib = qrLib || new Promise((res, rej) => { const sc = document.createElement('script');
-    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); });
-  qrLib.then(() => { const d = document.createElement('div');
-      new QRCode(d, { text: url, width: 512, height: 512, correctLevel: QRCode.CorrectLevel.M });
-      qrCache[url] = d.querySelector('canvas')?.toDataURL() || ''; render(); })
-    .catch(() => { qrCache[url] = ''; });
+  qrDataURL(url).then(img => { qrCache[url] = img; if(img) render(); });
   return null;
 }
 function crierSide(){
@@ -3790,6 +3830,8 @@ document.addEventListener('click', async e => {
       case 'create': return createGame();
       case 'tryit': return openTry();
       case 'try-back': return closeTry();
+      case 'qr-show': return openQr();
+      case 'qr-join': return qrJoin(el.dataset.code);
       case 'try-go': return tryItNow();
       case 'bal-info': return balanceInfo();
       case 'joincode': return joinGame($('in-code').value);
@@ -4131,13 +4173,18 @@ document.addEventListener('change', e => { if(e.target.id === 'ht-ch') htPlay(HT
   if(MOCK) window.__ht = { DB: () => DB, path: () => gp(), game: () => game, uids, sound: () => ({ device: isSoundDevice(), locked: audioLocked(), loops: Object.keys(loops), buffers }), fxBats, fxMeteor, fxGust,
     ravens: () => ({ loop: ravenLoopOn, local: Object.keys(ravenLocal), state: game?.ravens }), ravenFrame };   // offline test hook
   $('mocknote').textContent = MOCK ? 'Offline test mode: games live only in this browser. Turn on Test mode in the lobby and add bots. To try the Town Crier, open this page in a second tab and join with the code.' : '';
-  // ?crier=CODE opens straight into Town Crier mode (handy as a TV bookmark); ?join=CODE fills in the code.
-  const q = new URLSearchParams(location.search);
-  if(q.get('join')) $('in-code').value = q.get('join').toUpperCase();
+  // ?crier=CODE opens straight into Town Crier mode (handy as a TV bookmark). ?join=CODE (the host's QR code)
+  // fills in the code and asks for a name: one tap to join. It's then taken off the address, so a reload
+  // doesn't ask again.
+  const q = new URLSearchParams(location.search), jc = (q.get('join') || '').trim().toUpperCase();
+  if(jc){ $('in-code').value = jc; q.delete('join'); window.history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString().replace(/=(&|$)/g, '$1') : '')); }
   const cc = q.get('crier') || ss.get('howlertown_crier_game');
   if(cc){ const g = await DB.get(`${GAMES}/${cc.toUpperCase()}`).catch(() => null); if(fresh(g)) return enterCrier(cc.toUpperCase()); ss.del('howlertown_crier_game'); }
   const saved = ls.get('howlertown_current_game');
-  if(saved){ const g = await DB.get(`${GAMES}/${saved}`).catch(() => null); if(fresh(g) && g.players?.[myUid]) return enterGame(saved); ls.del('howlertown_current_game'); }
+  // Back into the game you were in, unless the QR code was for a different game.
+  if(saved && (!jc || jc === saved)){ const g = await DB.get(`${GAMES}/${saved}`).catch(() => null); if(fresh(g) && g.players?.[myUid]) return enterGame(saved); }
+  if(saved && !jc) ls.del('howlertown_current_game');
+  if(jc){ showHome(); return openJoinPrompt(jc); }
   if(!ls.get('howlertown_splash_seen') && !q.get('join')) return showSplash();      // first visit on this device
   showHome();
 })();
