@@ -275,6 +275,7 @@ body.crier .rules-card{width:min(720px,90vw)}
 .qr-code{font-family:var(--serif);font-size:18px;color:#555;margin:8px 0 12px;letter-spacing:.06em}
 .qr-code b{font-size:30px;color:#1b1b1f;letter-spacing:.12em}
 .qr-card .btn{background:#1b1b1f;color:#fff;border-color:#1b1b1f}
+.qr-icon{width:1.25em;height:1.25em;vertical-align:-.25em;margin-right:.35em;shape-rendering:crispEdges}
 .sndpanel b{font-family:var(--serif);font-weight:400;font-size:19px}
 #sndcap{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:60;pointer-events:none;display:flex;flex-direction:column;gap:4px;align-items:center}
 #sndcap div{background:rgba(15,19,32,.88);border:1px solid var(--ember);color:var(--ember);border-radius:999px;padding:4px 12px;font-size:15px;white-space:nowrap}
@@ -1085,7 +1086,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const now = () => Date.now();
 // Shown small at the bottom of every screen, so it's easy to tell which version a device is running (owner,
 // 2026-10-09). Bump it with every change that's uploaded: date, then a letter for each upload that day.
-const APP_VERSION = '2026-10-20 a';
+const APP_VERSION = '2026-10-20 b';
 // The page is already parsed when this module runs.
 if(document.getElementById('ver')) document.getElementById('ver').textContent = 'v ' + APP_VERSION;
 const rnd = a => a[Math.floor(Math.random() * a.length)];
@@ -2068,13 +2069,22 @@ function openTry(){
   $('tryit').classList.remove('hidden');
 }
 const closeTry = () => { $('tryit').classList.add('hidden'); $('tryit').classList.remove('qr'); $('tryit').innerHTML = ''; };
+// A small mock QR icon for the button and the card's title (owner: clearer than 📱). It is deliberately not a
+// real code: only 11 x 11 squares (the smallest real QR code is 21 x 21), so no camera can read it.
+const QR_ICON = (() => {
+  const on = new Set(['4,0','6,1','4,2','5,3','0,4','2,4','4,4','6,4','8,4','10,4','3,5','7,5','9,5','1,6','4,6','6,6','8,6','4,8','6,8','9,8','5,9','8,9','10,9','4,10','7,10','9,10']);
+  let r = '';
+  for(const [x, y] of [[0,0],[8,0],[0,8]]) r += `<rect x="${x + .5}" y="${y + .5}" width="2" height="2" fill="none" stroke="currentColor" stroke-width="1"/><rect x="${x + 1}" y="${y + 1}" width="1" height="1" fill="currentColor"/>`;
+  for(const k of on){ const [x, y] = k.split(',').map(Number); r += `<rect x="${x}" y="${y}" width="1" height="1" fill="currentColor"/>`; }
+  return `<svg class="qr-icon" viewBox="-.5 -.5 12 12" aria-hidden="true">${r}</svg>`;
+})();
 // ---- Scan to join (owner, 2026-10-20, as in Balderlaugh) ----
 // The host's lobby button shows a big QR code of this page + ?join=CODE, on a white card any phone camera reads.
 // Scanning it opens a "Join game" box with this phone's saved name filled in: one tap and they're in the lobby.
 async function openQr(){
   if(!code) return;
   $('tryit').classList.add('qr');
-  $('tryit').innerHTML = `<div class="qr-card"><h2>📱 Scan to join</h2><div class="qr-img"><p class="note">Drawing the code…</p></div>
+  $('tryit').innerHTML = `<div class="qr-card"><h2>${QR_ICON} Scan to join</h2><div class="qr-img"><p class="note">Drawing the code…</p></div>
     <div class="qr-code">CODE <b>${esc(code)}</b></div><div class="row" style="justify-content:center"><button class="btn" data-act="try-back">Close</button></div></div>`;
   $('tryit').classList.remove('hidden');
   const img = await qrDataURL(joinURL()), box = document.querySelector('#tryit .qr-img');
@@ -2757,7 +2767,7 @@ function renderLobby(){
   const away = !host && game.hostBeat && now() - game.hostBeat > 20000;
   setHTML('lobby', `
     <div class="top"><span>Game code</span><span class="tag">${esc(code)}</span></div>
-    ${host ? '<div class="row" style="margin-top:8px"><button class="btn full" data-act="qr-show">📱 Show QR code so others can join</button></div>' : ''}
+    ${host ? `<div class="row" style="margin-top:8px"><button class="btn full" data-act="qr-show">${QR_ICON} Show QR code so others can join</button></div>` : ''}
     <p class="narr">${say('lobby', 0)}</p>
     ${lobbySec('players', `Players (${list.length})`, (() => { const b = list.filter(u => players()[u].bot).length;
         return `${list.length - b} ${list.length - b === 1 ? 'person' : 'people'}${b ? `, ${b} bot${b === 1 ? '' : 's'}` : ''}${s.seats !== 'any' ? `, ${seatCap(game)} seats` : ''}`; })(), `
