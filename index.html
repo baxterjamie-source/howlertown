@@ -1086,7 +1086,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const now = () => Date.now();
 // Shown small at the bottom of every screen, so it's easy to tell which version a device is running (owner,
 // 2026-10-09). Bump it with every change that's uploaded: date, then a letter for each upload that day.
-const APP_VERSION = '2026-10-20 b';
+const APP_VERSION = '2026-10-21 a';
 // The page is already parsed when this module runs.
 if(document.getElementById('ver')) document.getElementById('ver').textContent = 'v ' + APP_VERSION;
 const rnd = a => a[Math.floor(Math.random() * a.length)];
@@ -3864,6 +3864,8 @@ document.addEventListener('click', async e => {
       case 'ht-next': return htPlay(Math.min(HT_BEATS.length - 1, htState.i + 1));
       case 'ht-restart': return htPlay(0);
       case 'ht-start': closeHowTo(); return endSplash();
+      // The walkthrough's last screen (owner, 2026-10-21): straight to a practice game with 7 bots.
+      case 'ht-tryit': closeHowTo(); return openTry();
       case 'sec': { const k = el.dataset.sec; lobbyOpen.has(k) ? lobbyOpen.delete(k) : lobbyOpen.add(k); return renderLobby(); }
       case 'snd-unlock': await audio()?.resume(); return render();
       case 'snd-test': testChime(); soundCaption('Test chime'); return;
@@ -4113,7 +4115,7 @@ const HT_BEATS = [
   // 9 Tips
   { ch:8, bg:'night', card: () => htPhone(`<div class="ht-rc"><span class="seal">?</span><span><b>Your card</b><small>Tap to flip it over. Keep it hidden.</small></span></div>`), t:'Keep your card hidden. Never show your phone.' },
   { ch:8, bg:'day', svg: () => htCrowd(7, 'day', 2), t:'The loudest, and the silent, both look suspicious. Choose your words carefully.' },
-  { ch:8, bg:'night', card: () => `<div class="ht-end">${htTitle('Howlertown')}<div class="row" style="justify-content:center"><button class="btn" data-act="ht-restart">Play again</button><button class="btn pri" data-act="ht-start">Start</button><button class="btn" data-act="ht-tab" data-tab="rules">Rules</button></div></div>`,
+  { ch:8, bg:'night', card: () => `<div class="ht-end">${htTitle('Howlertown')}<div class="row" style="justify-content:center"><button class="btn" data-act="ht-restart">Play again</button><button class="btn pri" data-act="ht-start">Start</button><button class="btn" data-act="ht-tryit">Try it now!</button><button class="btn" data-act="ht-tab" data-tab="rules">Rules</button></div></div>`,
     t:'That’s Howlertown. Good luck… and sleep with one eye open.' },
 ];
 let htState = { i:0, tok:0, playing:false, tab:'watch' }, htNodes = [];
